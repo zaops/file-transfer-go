@@ -2,6 +2,8 @@ package models
 
 import (
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 // FileInfo 文件信息结构
@@ -58,6 +60,25 @@ type FileTransferInfo struct {
 	Size         int64  `json:"size"`
 	Type         string `json:"type"`
 	LastModified int64  `json:"lastModified"`
+}
+
+// ClientInfo 客户端连接信息
+type ClientInfo struct {
+	ID         string          `json:"id"`         // 客户端唯一标识
+	Role       string          `json:"role"`       // sender 或 receiver
+	Connection *websocket.Conn `json:"-"`          // WebSocket连接（不序列化）
+	JoinedAt   time.Time       `json:"joined_at"`  // 加入时间
+	UserAgent  string          `json:"user_agent"` // 用户代理
+}
+
+// RoomStatus 房间状态信息
+type RoomStatus struct {
+	Code          string       `json:"code"`
+	FileCount     int          `json:"file_count"`
+	SenderCount   int          `json:"sender_count"`
+	ReceiverCount int          `json:"receiver_count"`
+	Clients       []ClientInfo `json:"clients"`
+	CreatedAt     time.Time    `json:"created_at"`
 }
 
 // ErrorResponse 错误响应结构

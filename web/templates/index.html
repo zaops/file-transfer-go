@@ -58,6 +58,17 @@
                                 等待接收方连接...
                             </div>
                         </div>
+                        
+                        <!-- 房间状态显示 -->
+                        <div id="roomStatusSection" class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg hidden">
+                            <h5 class="font-semibold text-blue-800 mb-2">房间状态</h5>
+                            <div id="roomConnections" class="text-sm text-blue-700">
+                                <div>在线用户: <span id="onlineCount">0</span> 人</div>
+                                <div>发送方: <span id="senderCount">0</span> 人</div>
+                                <div>接收方: <span id="receiverCount">0</span> 人</div>
+                            </div>
+                            <div id="clientsList" class="mt-2 space-y-1"></div>
+                        </div>
                     </div>
                 </div>
 
@@ -93,6 +104,17 @@
                                 已连接，可以下载文件
                             </div>
                         </div>
+                        
+                        <!-- 房间状态显示 (接收方) -->
+                        <div id="receiverRoomStatusSection" class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                            <h5 class="font-semibold text-blue-800 mb-2">房间状态</h5>
+                            <div id="receiverRoomConnections" class="text-sm text-blue-700">
+                                <div>在线用户: <span id="receiverOnlineCount">0</span> 人</div>
+                                <div>发送方: <span id="receiverSenderCount">0</span> 人</div>
+                                <div>接收方: <span id="receiverReceiverCount">0</span> 人</div>
+                            </div>
+                            <div id="receiverClientsList" class="mt-2 space-y-1"></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -109,7 +131,5 @@
 
 {{define "scripts"}}
 <!-- P2P文件传输相关脚本 -->
-<script src="/static/js/p2p-transfer.js"></script>
-<script src="/static/js/webrtc-connection.js"></script>
-<script src="/static/js/file-transfer.js"></script>
+<script src="/static/js/p2p-transfer-new.js"></script>
 {{end}}

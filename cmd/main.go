@@ -53,6 +53,8 @@ func main() {
 	// API路由
 	r.Post("/api/create-room", h.CreateRoomHandler)
 	r.Get("/api/room-info", h.GetRoomInfoHandler)
+	r.Get("/api/room-status", h.GetRoomStatusHandler)
+	r.Post("/api/update-room-files", h.UpdateRoomFilesHandler)
 
 	// 启动服务器
 	srv := &http.Server{

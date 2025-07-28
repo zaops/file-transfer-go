@@ -123,6 +123,69 @@ func (h *Handler) GetRoomInfoHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+// GetRoomStatusHandler 获取房间状态API
+func (h *Handler) GetRoomStatusHandler(w http.ResponseWriter, r *http.Request) {
+	code := r.URL.Query().Get("code")
+	if code == "" {
+		http.Error(w, "缺少取件码", http.StatusBadRequest)
+		return
+	}
+
+	status, exists := h.p2pService.GetRoomStatusByCode(code)
+	if !exists {
+		response := map[string]interface{}{
+			"success": false,
+			"message": "取件码不存在或已过期",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	response := map[string]interface{}{
+		"success": true,
+		"status":  status,
+		"message": "房间状态获取成功",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// UpdateRoomFilesHandler 更新房间文件列表API
+func (h *Handler) UpdateRoomFilesHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "方法不允许", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Code  string                    `json:"code"`
+		Files []models.FileTransferInfo `json:"files"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "解析请求失败", http.StatusBadRequest)
+		return
+	}
+
+	// 更新房间文件列表
+	success := h.p2pService.UpdateRoomFiles(req.Code, req.Files)
+
+	response := map[string]interface{}{
+		"success": success,
+	}
+
+	if success {
+		response["message"] = "文件列表更新成功"
+	} else {
+		response["message"] = "房间不存在或更新失败"
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
 // HandleP2PWebSocket 处理P2P WebSocket连接
 func (h *Handler) HandleP2PWebSocket(w http.ResponseWriter, r *http.Request) {
 	h.p2pService.HandleWebSocket(w, r)
