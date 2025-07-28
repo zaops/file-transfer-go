@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}} - 文件传输系统</title>
+    
+    <!-- SEO优化 -->
+    <meta name="description" content="安全快速的P2P文件传输系统，支持大文件上传、视频流传输、取件码分享">
+    <meta name="keywords" content="文件传输,P2P,WebRTC,大文件上传,视频传输,取件码">
+    <meta name="author" content="文件传输系统">
+    
+    <!-- 移动端优化 -->
+    <meta name="format-detection" content="telephone=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    
+    <!-- 使用Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 自定义样式 -->
+    <link rel="stylesheet" href="/static/css/style.css">
+    
+    <!-- WebRTC兼容性 -->
+    <script>
+        // WebRTC 兼容性检查
+        window.RTCPeerConnection = window.RTCPeerConnection || window.webkitRTCPeerConnection || window.mozRTCPeerConnection;
+        window.RTCSessionDescription = window.RTCSessionDescription || window.webkitRTCSessionDescription || window.mozRTCSessionDescription;
+        window.RTCIceCandidate = window.RTCIceCandidate || window.webkitRTCIceCandidate || window.mozRTCIceCandidate;
+    </script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- 导航栏 -->
+    <nav class="bg-white shadow-sm border-b">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center">
+                    <a href="/" class="text-xl font-bold text-gray-900">
+                        📁 文件传输
+                    </a>
+                </div>
+                <div class="flex space-x-4">
+                    <a href="/" class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
+                        首页
+                    </a>
+                    <a href="/upload" class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
+                        上传文件
+                    </a>
+                    <a href="/video" class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
+                        视频传输
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主要内容区域 -->
+    <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+        {{template "content" .}}
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="bg-white border-t mt-auto">
+        <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+            <div class="text-center text-gray-500 text-sm">
+                <p>&copy; 2024 文件传输系统. 支持P2P传输、WebRTC视频、大文件上传</p>
+                <p class="mt-2">
+                    兼容主流浏览器: Chrome, Safari, Firefox, Edge, 360浏览器, QQ浏览器
+                </p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- 通用JavaScript -->
+    <script src="/static/js/common.js"></script>
+    
+    <!-- 页面特定脚本 -->
+    {{template "scripts" .}}
+</body>
+</html>

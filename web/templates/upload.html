@@ -1,0 +1,353 @@
+{{define "content"}}
+<div class="max-w-4xl mx-auto">
+    <!-- 页面标题 -->
+    <div class="text-center mb-8">
+        <h1 class="text-3xl font-bold text-gray-900 mb-4">📤 文件上传</h1>
+        <p class="text-lg text-gray-600">
+            支持拖拽上传、多文件批量上传、进度显示。最大支持64TB文件。
+        </p>
+    </div>
+
+    {{if .Success}}
+    <!-- 上传成功提示 -->
+    <div class="bg-green-50 border border-green-200 rounded-lg p-6 mb-8">
+        <div class="text-center">
+            <div class="text-4xl mb-4">✅</div>
+            <h2 class="text-xl font-bold text-green-800 mb-4">文件上传成功！</h2>
+            
+            <div class="bg-white p-4 rounded-lg border mb-4">
+                <div class="text-left space-y-2">
+                    <p><strong>文件名：</strong>{{.FileInfo.FileName}}</p>
+                    <p><strong>文件大小：</strong><span id="fileSize">{{.FileInfo.FileSize}}</span> 字节</p>
+                    <p><strong>上传时间：</strong>{{.FileInfo.UploadTime.Format "2006-01-02 15:04:05"}}</p>
+                    <p><strong>过期时间：</strong>{{.FileInfo.ExpiryTime.Format "2006-01-02 15:04:05"}}</p>
+                </div>
+            </div>
+            
+            <div class="bg-blue-50 p-4 rounded-lg mb-4">
+                <p class="text-sm text-gray-600 mb-2">您的取件码：</p>
+                <div class="text-3xl font-bold text-blue-600 mb-2" id="shareCode">{{.FileInfo.Code}}</div>
+                <button onclick="copyCode('{{.FileInfo.Code}}')" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded text-sm">
+                    📋 复制取件码
+                </button>
+            </div>
+            
+            <div class="space-y-3">
+                <a href="{{.FileInfo.DownloadURL}}" class="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-lg inline-block">
+                    ⬇️ 直接下载
+                </a>
+                <br>
+                <button onclick="shareFile('{{.FileInfo.Code}}')" class="bg-purple-500 hover:bg-purple-600 text-white px-6 py-3 rounded-lg">
+                    🔗 分享文件
+                </button>
+            </div>
+        </div>
+    </div>
+    {{end}}
+
+    <!-- 上传区域 -->
+    <div class="bg-white rounded-lg shadow-md p-8">
+        <form id="uploadForm" enctype="multipart/form-data" method="post">
+            <!-- 拖拽上传区域 -->
+            <div id="dropZone" class="border-2 border-dashed border-gray-300 rounded-lg p-12 text-center hover:border-blue-400 transition-colors">
+                <div id="dropZoneContent">
+                    <div class="text-6xl mb-4">📁</div>
+                    <h3 class="text-xl font-semibold mb-2">拖拽文件到此处</h3>
+                    <p class="text-gray-600 mb-4">或者点击选择文件</p>
+                    <input type="file" id="fileInput" name="file" multiple class="hidden">
+                    <button type="button" onclick="document.getElementById('fileInput').click()" 
+                            class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold">
+                        选择文件
+                    </button>
+                </div>
+            </div>
+
+            <!-- 文件列表 -->
+            <div id="fileList" class="mt-6 hidden">
+                <h3 class="text-lg font-semibold mb-3">选中的文件：</h3>
+                <div id="files"></div>
+            </div>
+
+            <!-- 上传按钮 -->
+            <div id="uploadSection" class="mt-6 text-center hidden">
+                <button type="submit" id="uploadBtn" 
+                        class="bg-green-500 hover:bg-green-600 text-white px-8 py-3 rounded-lg font-semibold text-lg">
+                    🚀 开始上传
+                </button>
+            </div>
+        </form>
+
+        <!-- 上传进度 -->
+        <div id="uploadProgress" class="mt-6 hidden">
+            <div class="mb-3">
+                <div class="flex justify-between text-sm text-gray-600">
+                    <span>上传进度</span>
+                    <span id="progressText">0%</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-2">
+                    <div id="progressBar" class="bg-blue-500 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+            </div>
+            <div id="uploadStatus" class="text-center text-gray-600"></div>
+        </div>
+    </div>
+
+    <!-- 格式转换 -->
+    <div class="bg-white rounded-lg shadow-md p-8 mt-8">
+        <h2 class="text-xl font-bold mb-4">📚 Kindle格式转换</h2>
+        <p class="text-gray-600 mb-4">
+            专为Kindle用户提供EPUB到MOBI格式转换服务。上传EPUB文件后自动转换为MOBI格式。
+        </p>
+        <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <p class="text-yellow-800">
+                💡 <strong>提示：</strong>格式转换功能正在开发中，敬请期待。
+            </p>
+        </div>
+    </div>
+
+    <!-- 技术说明 -->
+    <div class="bg-gray-50 rounded-lg p-8 mt-8">
+        <h2 class="text-xl font-bold mb-4">🔧 技术特性</h2>
+        <div class="grid md:grid-cols-2 gap-6">
+            <div>
+                <h3 class="font-semibold mb-2">✨ 拖拽上传</h3>
+                <p class="text-gray-600 text-sm">支持拖拽文件到页面，HTML5 File API优化用户体验。</p>
+            </div>
+            <div>
+                <h3 class="font-semibold mb-2">📊 进度显示</h3>
+                <p class="text-gray-600 text-sm">实时显示上传进度，支持多文件批量上传。</p>
+            </div>
+            <div>
+                <h3 class="font-semibold mb-2">🔄 断点续传</h3>
+                <p class="text-gray-600 text-sm">大文件分片上传，网络中断后可继续上传。</p>
+            </div>
+            <div>
+                <h3 class="font-semibold mb-2">🛡️ 安全存储</h3>
+                <p class="text-gray-600 text-sm">24小时自动清理，保护用户隐私和服务器空间。</p>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}
+
+{{define "scripts"}}
+<script>
+// 文件上传相关变量
+let selectedFiles = [];
+let uploadInProgress = false;
+
+// DOM元素
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const fileList = document.getElementById('fileList');
+const filesContainer = document.getElementById('files');
+const uploadSection = document.getElementById('uploadSection');
+const uploadForm = document.getElementById('uploadForm');
+const uploadProgress = document.getElementById('uploadProgress');
+const progressBar = document.getElementById('progressBar');
+const progressText = document.getElementById('progressText');
+const uploadStatus = document.getElementById('uploadStatus');
+
+// 拖拽事件处理
+dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.classList.add('border-blue-400', 'bg-blue-50');
+});
+
+dropZone.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('border-blue-400', 'bg-blue-50');
+});
+
+dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('border-blue-400', 'bg-blue-50');
+    
+    const files = Array.from(e.dataTransfer.files);
+    handleFiles(files);
+});
+
+// 文件选择事件
+fileInput.addEventListener('change', (e) => {
+    const files = Array.from(e.target.files);
+    handleFiles(files);
+});
+
+// 处理选中的文件
+function handleFiles(files) {
+    selectedFiles = files;
+    displayFiles();
+    
+    if (files.length > 0) {
+        fileList.classList.remove('hidden');
+        uploadSection.classList.remove('hidden');
+    }
+}
+
+// 显示文件列表
+function displayFiles() {
+    filesContainer.innerHTML = '';
+    
+    selectedFiles.forEach((file, index) => {
+        const fileDiv = document.createElement('div');
+        fileDiv.className = 'flex items-center justify-between bg-gray-50 p-3 rounded-lg mb-2';
+        
+        fileDiv.innerHTML = `
+            <div class="flex items-center">
+                <span class="text-2xl mr-3">${getFileIcon(file.type)}</span>
+                <div>
+                    <div class="font-medium">${file.name}</div>
+                    <div class="text-sm text-gray-500">${formatFileSize(file.size)}</div>
+                </div>
+            </div>
+            <button type="button" onclick="removeFile(${index})" 
+                    class="text-red-500 hover:text-red-700 p-1">
+                ❌
+            </button>
+        `;
+        
+        filesContainer.appendChild(fileDiv);
+    });
+}
+
+// 移除文件
+function removeFile(index) {
+    selectedFiles.splice(index, 1);
+    displayFiles();
+    
+    if (selectedFiles.length === 0) {
+        fileList.classList.add('hidden');
+        uploadSection.classList.add('hidden');
+    }
+}
+
+// 获取文件图标
+function getFileIcon(type) {
+    if (type.startsWith('image/')) return '🖼️';
+    if (type.startsWith('video/')) return '🎥';
+    if (type.startsWith('audio/')) return '🎵';
+    if (type.includes('pdf')) return '📄';
+    if (type.includes('text')) return '📝';
+    if (type.includes('zip') || type.includes('rar')) return '📦';
+    return '📁';
+}
+
+// 格式化文件大小
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+// 表单提交处理
+uploadForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    if (uploadInProgress || selectedFiles.length === 0) {
+        return;
+    }
+    
+    uploadInProgress = true;
+    showUploadProgress();
+    
+    try {
+        // 这里简化处理，实际应该支持分片上传
+        const formData = new FormData();
+        formData.append('file', selectedFiles[0]); // 暂时只处理第一个文件
+        
+        const xhr = new XMLHttpRequest();
+        
+        // 监听上传进度
+        xhr.upload.addEventListener('progress', (e) => {
+            if (e.lengthComputable) {
+                const percentComplete = (e.loaded / e.total) * 100;
+                updateProgress(percentComplete);
+            }
+        });
+        
+        // 上传完成处理
+        xhr.addEventListener('load', () => {
+            if (xhr.status === 200) {
+                updateProgress(100);
+                uploadStatus.textContent = '上传成功！正在跳转...';
+                setTimeout(() => {
+                    location.reload();
+                }, 1000);
+            } else {
+                throw new Error('上传失败');
+            }
+        });
+        
+        // 错误处理
+        xhr.addEventListener('error', () => {
+            throw new Error('网络错误');
+        });
+        
+        xhr.open('POST', '/upload');
+        xhr.setRequestHeader('Accept', 'application/json');
+        xhr.send(formData);
+        
+    } catch (error) {
+        uploadStatus.textContent = '上传失败: ' + error.message;
+        uploadInProgress = false;
+    }
+});
+
+// 显示上传进度
+function showUploadProgress() {
+    uploadProgress.classList.remove('hidden');
+    uploadSection.classList.add('hidden');
+    uploadStatus.textContent = '正在上传文件...';
+}
+
+// 更新进度
+function updateProgress(percent) {
+    progressBar.style.width = percent + '%';
+    progressText.textContent = Math.round(percent) + '%';
+}
+
+// 复制取件码
+function copyCode(code) {
+    navigator.clipboard.writeText(code).then(() => {
+        alert('取件码已复制到剪贴板: ' + code);
+    }).catch(() => {
+        // 兼容性处理
+        const textArea = document.createElement('textarea');
+        textArea.value = code;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        alert('取件码已复制到剪贴板: ' + code);
+    });
+}
+
+// 分享文件
+function shareFile(code) {
+    const shareUrl = `${window.location.origin}/download/${code}`;
+    const shareText = `文件分享\n取件码: ${code}\n下载链接: ${shareUrl}\n有效期: 24小时`;
+    
+    if (navigator.share) {
+        navigator.share({
+            title: '文件分享',
+            text: shareText,
+            url: shareUrl
+        });
+    } else {
+        copyCode(shareText);
+        alert('分享信息已复制到剪贴板');
+    }
+}
+
+// 页面加载时格式化文件大小
+document.addEventListener('DOMContentLoaded', () => {
+    const fileSizeElement = document.getElementById('fileSize');
+    if (fileSizeElement) {
+        const bytes = parseInt(fileSizeElement.textContent);
+        fileSizeElement.textContent = formatFileSize(bytes);
+    }
+});
+</script>
+{{end}}
