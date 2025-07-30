@@ -103,3 +103,7 @@ backup/
 
 *.log
 /bin/*
+./chuan-next/node_modules/
+# Next.js相关
+.next/
+./chuan/.next

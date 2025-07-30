@@ -1,132 +1,350 @@
 {{define "content"}}
-<div class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-    <div class="container mx-auto px-4 py-8">
-        <div class="max-w-4xl mx-auto">
-            <!-- 标题 -->
-            <div class="text-center mb-8">
-                <h1 class="text-4xl font-bold text-gray-800 mb-2">P2P文件传输</h1>
-                <p class="text-gray-600">选择文件自动生成取件码，对方输入取件码即可在线下载</p>
-            </div>
+<!-- 加载屏幕 -->
+<div id="loadingScreen" class="fixed inset-0 bg-white z-50 flex items-center justify-center">
+    <div class="text-center">
+        <div class="w-16 h-16 border-4 border-blue-200 border-t-blue-500 rounded-full animate-spin mx-auto mb-4"></div>
+        <p class="text-gray-600">正在加载...</p>
+    </div>
+</div>
 
-            <!-- 主界面 -->
-            <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
-                <!-- 发送文件区域 -->
-                <div id="senderSection" class="mb-8">
-                    <h3 class="text-xl font-semibold mb-4">📤 发送文件</h3>
+<<!-- 固定的Header -->
+<div class="fixed top-0 left-0 right-0 bg-white/95 backdrop-blur-sm border-b border-gray-200 z-50">
+    <div class="container mx-auto px-4 py-4">
+        <div class="text-center">
+            <h1 class="text-2xl font-bold text-gray-900 mb-1">🔗 P2P文件传输</h1>
+            <p class="text-gray-600 text-sm">安全快速的点对点文件传输</p>
+        </div>
+    </div>
+</div>
+
+<div class="min-h-screen bg-gray-50 pt-20" style="display: none;" id="mainContent">
+    <div class="container mx-auto px-4 py-6">
+        <div class="max-w-6xl mx-auto">
+            <!-- 主功能区域 - 标签页布局 -->
+
+            <!-- 主功能区域 - 标签页布局 -->
+            <div class="max-w-4xl mx-auto bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <!-- 标签页导航 -->
+                <div class="flex border-b border-gray-200">
+                    <button id="sendTab" onclick="switchTab('send')" 
+                            class="tab-button active flex-1 px-6 py-4 text-center font-medium transition-all duration-200 border-b-2 border-blue-500 bg-blue-50 text-blue-600">
+                        <div class="flex items-center justify-center">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                            </svg>
+                            发送文件
+                        </div>
+                    </button>
+                    <button id="receiveTab" onclick="switchTab('receive')" 
+                            class="tab-button flex-1 px-6 py-4 text-center font-medium transition-all duration-200 border-b-2 border-transparent text-gray-600 hover:text-gray-800 hover:bg-gray-50">
+                        <div class="flex items-center justify-center">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 11l3 3m0 0l3-3m-3 3V8"></path>
+                            </svg>
+                            接收文件
+                        </div>
+                    </button>
+                </div>
+                
+                <!-- 发送文件内容区域 -->
+                <div id="sendContent" class="tab-content active p-6">
+                    <div class="mb-6">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-2 flex items-center">
+                            <svg class="w-5 h-5 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                            </svg>
+                            选择文件并生成取件码
+                        </h3>
+                        <p class="text-gray-600 text-sm">选择要发送的文件，系统会生成取件码供接收方使用</p>
+                    </div>
                     
-                    <!-- 文件选择区域 -->
-                    <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-400 transition-colors cursor-pointer" 
-                         onclick="document.getElementById('fileInput').click()">
-                        <div class="text-6xl mb-4">📁</div>
-                        <p class="text-lg mb-2">点击选择文件或拖拽文件到此处</p>
-                        <p class="text-gray-500">支持多文件选择</p>
-                        <input type="file" id="fileInput" multiple class="hidden">
+                    <div class="p-6">
+                        <!-- 文件选择区域 - 简化设计 -->
+                        <div id="fileDropZone" class="border-2 border-dashed border-gray-200 rounded-xl p-8 text-center hover:border-blue-300 hover:bg-blue-50 transition-all duration-200 cursor-pointer group" 
+                             onclick="handleDropZoneClick(event)">
+                            <div class="text-4xl mb-3 group-hover:scale-110 transition-transform duration-200">�</div>
+                            <h3 class="text-lg font-medium text-gray-700 mb-2">选择文件</h3>
+                            <p class="text-sm text-gray-500">点击或拖拽文件到此处</p>
+                            <p class="text-xs text-gray-400 mt-1">支持多文件选择</p>
+                            <input type="file" id="fileInput" multiple class="hidden">
+                        </div>
+
+                        <!-- 文件列表区域 -->
+                        <div id="fileListArea" class="hidden">
+                            <div class="border-2 border-dashed border-gray-200 rounded-xl p-4 cursor-pointer hover:border-blue-300 hover:bg-blue-50 transition-all duration-200" 
+                                 onclick="handleDropZoneClick(event)">
+                                <div class="flex items-center justify-between mb-3">
+                                    <h4 class="font-medium text-gray-700">已选择文件</h4>
+                                    <div class="flex items-center gap-2">
+                                        <span id="fileCount" class="text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded-full"></span>
+                                        <button onclick="addMoreFiles()" class="text-sm text-blue-600 hover:text-blue-800 px-2 py-1 rounded">
+                                            + 添加更多
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="filesList" class="space-y-1 max-h-40 overflow-y-auto mb-4"></div>
+                                <div class="text-center">
+                                    <button id="generateCodeBtn" onclick="generatePickupCode()" 
+                                            class="bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-lg text-sm font-medium transition-colors duration-200 shadow-sm hover:shadow-md">
+                                        生成取件码
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 取件码显示 - 更紧凑的设计 -->
+                        <div id="pickupCodeSection" class="mt-4 hidden">
+                            <div class="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl p-4 text-center">
+                                <div class="flex items-center justify-center mb-3">
+                                    <svg class="w-5 h-5 text-green-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    <h4 class="font-semibold text-green-800 text-sm">取件码和链接</h4>
+                                </div>
+                                
+                                <div class="bg-white border border-green-200 rounded-lg p-3 mb-3">
+                                    <div class="text-2xl font-mono font-bold text-green-600 tracking-wider select-all" id="pickupCodeDisplay" onclick="event.stopPropagation(); copyPickupCode();"></div>
+                                </div>
+                                
+                                <!-- 特定链接 -->
+                                <div class="bg-white border border-green-200 rounded-lg p-2 mb-3">
+                                    <div class="text-xs text-gray-600 mb-1">直接取件链接：</div>
+                                    <div class="text-xs font-mono text-blue-600 break-all select-all cursor-pointer" id="pickupLinkDisplay" onclick="event.stopPropagation(); copyPickupLink();"></div>
+                                </div>
+                                
+                                <p class="text-green-700 text-xs mb-3">点击取件码或链接可直接复制</p>
+                                <div class="grid grid-cols-3 gap-2">
+                                    <button onclick="event.stopPropagation(); copyPickupCode()" class="bg-green-500 hover:bg-green-600 text-white py-1.5 px-3 rounded-lg text-xs font-medium transition-colors">
+                                        📋 复制码
+                                    </button>
+                                    <button onclick="event.stopPropagation(); copyPickupLink()" class="bg-blue-500 hover:bg-blue-600 text-white py-1.5 px-3 rounded-lg text-xs font-medium transition-colors">
+                                        🔗 复制链接
+                                    </button>
+                                    <button onclick="event.stopPropagation(); resetSender()" class="bg-gray-500 hover:bg-gray-600 text-white py-1.5 px-3 rounded-lg text-xs font-medium transition-colors">
+                                        🔄 重置
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <!-- 连接状态 - 简化显示 -->
+                            <div id="senderStatus" class="mt-3">
+                                <div class="flex items-center justify-center p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                    <div class="flex items-center">
+                                        <div class="w-2 h-2 bg-yellow-500 rounded-full mr-2 animate-pulse"></div>
+                                        <span class="text-yellow-800 text-xs font-medium">等待连接...</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 房间状态 - 折叠式显示 -->
+                            <div id="roomStatusSection" class="mt-3 hidden">
+                                <details class="bg-blue-50 border border-blue-200 rounded-lg">
+                                    <summary class="p-2 cursor-pointer text-blue-800 font-medium text-xs hover:bg-blue-100 rounded-lg">
+                                        房间状态 📊
+                                    </summary>
+                                    <div class="px-2 pb-2">
+                                        <div id="roomConnections" class="text-xs text-blue-700 space-y-1">
+                                            <div class="flex justify-between">
+                                                <span>在线用户:</span>
+                                                <span id="onlineCount" class="font-medium">0</span>
+                                            </div>
+                                            <div class="flex justify-between">
+                                                <span>发送方:</span>
+                                                <span id="senderCount" class="font-medium">0</span>
+                                            </div>
+                                            <div class="flex justify-between">
+                                                <span>接收方:</span>
+                                                <span id="receiverCount" class="font-medium">0</span>
+                                            </div>
+                                        </div>
+                                        <div id="clientsList" class="mt-1 space-y-1"></div>
+                                    </div>
+                                </details>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 接收文件内容区域 -->
+                <div id="receiveContent" class="tab-content hidden p-6">
+                    <div class="mb-6">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-2 flex items-center">
+                            <svg class="w-5 h-5 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 11l3 3m0 0l3-3m-3 3V8"></path>
+                            </svg>
+                            输入取件码获取文件
+                        </h3>
+                        <p class="text-gray-600 text-sm">输入6位取件码，连接发送方并下载文件</p>
                     </div>
 
-                    <!-- 选中的文件列表 -->
-                    <div id="selectedFiles" class="mt-6 hidden">
-                        <h4 class="font-semibold mb-3">已选择的文件：</h4>
-                        <div id="filesList" class="space-y-2 max-h-60 overflow-y-auto"></div>
-                        <div class="mt-4 text-center">
-                            <button id="generateCodeBtn" onclick="generatePickupCode()" 
-                                    class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold">
-                                🎯 生成取件码
+                <!-- 右侧：接收文件 -->
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div class="bg-gradient-to-r from-green-500 to-green-600 px-6 py-4">
+                        <h2 class="text-xl font-semibold text-white flex items-center">
+                            <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 11l3 3m0 0l3-3m-3 3V8"></path>
+                            </svg>
+                            接收文件
+                        </h2>
+                        <p class="text-green-100 text-sm mt-1">输入取件码，获取文件</p>
+                    </div>
+                    
+                    <div class="p-6">
+                        <!-- 取件码输入 - 简化设计 -->
+                        <div id="codeInputSection" class="text-center">
+                            <div class="max-w-sm mx-auto">
+                                <label class="block text-sm font-medium text-gray-700 mb-3">请输入6位取件码</label>
+                                <input type="text" id="pickupCodeInput" placeholder="取件码" maxlength="6"
+                                       class="w-full px-4 py-4 border-2 border-gray-200 rounded-xl text-center text-2xl font-mono font-bold uppercase focus:outline-none focus:border-green-500 focus:ring-4 focus:ring-green-100 transition-all duration-200">
+                                                            <button onclick="joinRoom()" class="w-full mt-4 bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-lg text-sm font-medium transition-colors duration-200 shadow-sm hover:shadow-md">
+                                🔗 连接获取
                             </button>
+                            </div>
                         </div>
-                    </div>
 
-                    <!-- 取件码显示 -->
-                    <div id="pickupCodeSection" class="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg hidden">
-                        <div class="text-center">
-                            <h4 class="font-semibold text-green-800 mb-2">取件码已生成</h4>
-                            <div class="text-3xl font-mono font-bold text-green-600 mb-2" id="pickupCodeDisplay"></div>
-                            <p class="text-green-700 mb-4">请将此取件码发送给对方</p>
-                            <div class="flex justify-center space-x-3">
-                                <button onclick="copyPickupCode()" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded">
-                                    📋 复制取件码
-                                </button>
-                                <button onclick="resetSender()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded">
-                                    🔄 重新选择文件
-                                </button>
+                        <!-- 文件列表显示 - 优化布局 -->
+                        <div id="receiverFilesSection" class="hidden">
+                            <div class="mt-6">
+                                <h4 class="font-medium text-gray-700 mb-4 flex items-center">
+                                    <svg class="w-5 h-5 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                    </svg>
+                                    可下载文件
+                                </h4>
+                                <div id="receiverFilesList" class="space-y-1"></div>
                             </div>
-                        </div>
-                        
-                        <!-- 连接状态 -->
-                        <div id="senderStatus" class="mt-4 text-center">
-                            <div class="inline-flex items-center px-3 py-1 rounded-full bg-yellow-100 text-yellow-800">
-                                <span class="w-2 h-2 bg-yellow-500 rounded-full mr-2"></span>
-                                等待接收方连接...
+                            
+                            <!-- 接收状态 - 简化显示 -->
+                            <div id="receiverStatus" class="mt-6">
+                                <div class="flex items-center justify-center p-3 bg-green-50 border border-green-200 rounded-lg">
+                                    <div class="flex items-center">
+                                        <div class="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                                        <span class="text-green-800 text-sm font-medium">已连接，可下载文件</span>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                        
-                        <!-- 房间状态显示 -->
-                        <div id="roomStatusSection" class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg hidden">
-                            <h5 class="font-semibold text-blue-800 mb-2">房间状态</h5>
-                            <div id="roomConnections" class="text-sm text-blue-700">
-                                <div>在线用户: <span id="onlineCount">0</span> 人</div>
-                                <div>发送方: <span id="senderCount">0</span> 人</div>
-                                <div>接收方: <span id="receiverCount">0</span> 人</div>
+                            
+                            <!-- 房间状态显示 (接收方) - 折叠式 -->
+                            <div id="receiverRoomStatusSection" class="mt-4">
+                                <details class="bg-blue-50 border border-blue-200 rounded-lg">
+                                    <summary class="p-3 cursor-pointer text-blue-800 font-medium text-sm hover:bg-blue-100 rounded-lg">
+                                        房间状态 📊
+                                    </summary>
+                                    <div class="px-3 pb-3">
+                                        <div id="receiverRoomConnections" class="text-xs text-blue-700 space-y-1">
+                                            <div class="flex justify-between">
+                                                <span>在线用户:</span>
+                                                <span id="receiverOnlineCount" class="font-medium">0</span>
+                                            </div>
+                                            <div class="flex justify-between">
+                                                <span>发送方:</span>
+                                                <span id="receiverSenderCount" class="font-medium">0</span>
+                                            </div>
+                                            <div class="flex justify-between">
+                                                <span>接收方:</span>
+                                                <span id="receiverReceiverCount" class="font-medium">0</span>
+                                            </div>
+                                        </div>
+                                        <div id="receiverClientsList" class="mt-2 space-y-1"></div>
+                                    </div>
+                                </details>
                             </div>
-                            <div id="clientsList" class="mt-2 space-y-1"></div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 分隔线 -->
-                <div class="border-t border-gray-200 my-8"></div>
-
-                <!-- 接收文件区域 -->
-                <div id="receiverSection">
-                    <h3 class="text-xl font-semibold mb-4">📥 接收文件</h3>
-                    
-                    <!-- 取件码输入 -->
-                    <div id="codeInputSection">
-                        <div class="flex justify-center mb-4">
-                            <div class="flex flex-col items-center max-w-md w-full">
-                                <input type="text" id="pickupCodeInput" placeholder="输入6位取件码" maxlength="6"
-                                       class="w-full px-4 py-3 border border-gray-300 rounded-lg text-center text-2xl font-mono font-bold uppercase mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                <button onclick="joinRoom()" class="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-lg font-semibold">
-                                    🔗 连接并获取文件
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- 文件列表显示 -->
-                    <div id="receiverFilesSection" class="hidden">
-                        <h4 class="font-semibold mb-3">可下载的文件：</h4>
-                        <div id="receiverFilesList" class="space-y-2"></div>
-                        
-                        <!-- 接收状态 -->
-                        <div id="receiverStatus" class="mt-4 text-center">
-                            <div class="inline-flex items-center px-3 py-1 rounded-full bg-green-100 text-green-800">
-                                <span class="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
-                                已连接，可以下载文件
-                            </div>
-                        </div>
-                        
-                        <!-- 房间状态显示 (接收方) -->
-                        <div id="receiverRoomStatusSection" class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                            <h5 class="font-semibold text-blue-800 mb-2">房间状态</h5>
-                            <div id="receiverRoomConnections" class="text-sm text-blue-700">
-                                <div>在线用户: <span id="receiverOnlineCount">0</span> 人</div>
-                                <div>发送方: <span id="receiverSenderCount">0</span> 人</div>
-                                <div>接收方: <span id="receiverReceiverCount">0</span> 人</div>
-                            </div>
-                            <div id="receiverClientsList" class="mt-2 space-y-1"></div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- 传输进度 -->
-            <div id="transferProgress" class="bg-white rounded-xl shadow-lg p-6 hidden">
-                <h3 class="text-xl font-semibold mb-4">传输进度</h3>
-                <div id="progressList" class="space-y-3"></div>
+            <!-- 传输进度 - 浮动卡片设计 -->
+            <div id="transferProgress" class="hidden">
+                <div class="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+                    <div class="bg-gradient-to-r from-purple-500 to-purple-600 px-6 py-4">
+                        <h3 class="text-xl font-semibold text-white flex items-center">
+                            <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                            </svg>
+                            传输进度
+                        </h3>
+                        <p class="text-purple-100 text-sm mt-1">文件传输状态</p>
+                    </div>
+                    <div class="p-6">
+                        <div id="progressList" class="space-y-4"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 底部提示信息 -->
+            <div class="mt-8 text-center">
+                <div class="inline-flex items-center px-4 py-2 bg-white rounded-full shadow-sm border border-gray-200">
+                    <svg class="w-4 h-4 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.707-3.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L9 10.586l7.293-7.293a1 1 0 011.414 0z"></path>
+                    </svg>
+                    <span class="text-sm text-gray-600">点对点传输，安全快速，不经过服务器</span>
+                </div>
             </div>
         </div>
     </div>
 </div>
+
+<!-- 错误边界处理 -->
+<script>
+// 标签页切换函数
+function switchTab(tab) {
+    // 移除所有标签页的活动状态
+    document.querySelectorAll('.tab-button').forEach(btn => {
+        btn.classList.remove('active', 'border-blue-500', 'bg-blue-50', 'text-blue-600', 'border-green-500', 'bg-green-50', 'text-green-600');
+        btn.classList.add('border-transparent', 'text-gray-600');
+    });
+    
+    // 隐藏所有标签页内容
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.add('hidden');
+        content.classList.remove('active');
+    });
+    
+    // 激活选中的标签页
+    if (tab === 'send') {
+        const sendTab = document.getElementById('sendTab');
+        const sendContent = document.getElementById('sendContent');
+        
+        sendTab.classList.remove('border-transparent', 'text-gray-600');
+        sendTab.classList.add('active', 'border-blue-500', 'bg-blue-50', 'text-blue-600');
+        
+        sendContent.classList.remove('hidden');
+        sendContent.classList.add('active');
+    } else if (tab === 'receive') {
+        const receiveTab = document.getElementById('receiveTab');
+        const receiveContent = document.getElementById('receiveContent');
+        
+        receiveTab.classList.remove('border-transparent', 'text-gray-600');
+        receiveTab.classList.add('active', 'border-green-500', 'bg-green-50', 'text-green-600');
+        
+        receiveContent.classList.remove('hidden');
+        receiveContent.classList.add('active');
+    }
+}
+
+// 隐藏加载屏幕并显示主内容
+window.addEventListener('load', () => {
+    setTimeout(() => {
+        document.getElementById('loadingScreen').style.display = 'none';
+        document.getElementById('mainContent').style.display = 'block';
+        document.getElementById('mainContent').classList.add('fade-in-up');
+    }, 800);
+});
+
+// 全局错误处理
+window.addEventListener('error', (event) => {
+    console.error('页面错误:', event.error);
+    showNotification('页面发生错误，请刷新重试', 'error');
+});
+
+// 未处理的Promise拒绝
+window.addEventListener('unhandledrejection', (event) => {
+    console.error('未处理的Promise拒绝:', event.reason);
+    showNotification('操作失败，请重试', 'error');
+    event.preventDefault();
+});
+</script>
 {{end}}
 
 {{define "scripts"}}

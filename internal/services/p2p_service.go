@@ -193,6 +193,9 @@ func (p *P2PService) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 		// 处理特殊消息类型
 		switch msg.Type {
+		case "update-file-list":
+			// 处理文件列表更新
+			p.handleFileListUpdate(room, clientID, msg)
 		case "file-request":
 			// 处理文件请求
 			p.handleFileRequest(room, clientID, msg)
@@ -263,6 +266,88 @@ func (p *P2PService) getRoomStatus(room *FileTransferRoom) models.RoomStatus {
 		Clients:       clients,
 		CreatedAt:     room.CreatedAt,
 	}
+}
+
+// handleFileListUpdate 处理文件列表更新
+func (p *P2PService) handleFileListUpdate(room *FileTransferRoom, clientID string, msg models.VideoMessage) {
+	// 获取文件列表
+	payload, ok := msg.Payload.(map[string]interface{})
+	if !ok {
+		log.Printf("无效的文件列表更新消息格式")
+		return
+	}
+
+	filesData, ok := payload["files"].([]interface{})
+	if !ok {
+		log.Printf("缺少文件列表数据")
+		return
+	}
+
+	// 转换文件列表格式
+	var files []models.FileTransferInfo
+	for _, fileData := range filesData {
+		if fileMap, ok := fileData.(map[string]interface{}); ok {
+			file := models.FileTransferInfo{
+				ID:           getString(fileMap, "id"),
+				Name:         getString(fileMap, "name"),
+				Size:         getInt64(fileMap, "size"),
+				Type:         getString(fileMap, "type"),
+				LastModified: getInt64(fileMap, "lastModified"),
+			}
+			files = append(files, file)
+		}
+	}
+
+	log.Printf("收到文件列表更新请求，共 %d 个文件", len(files))
+
+	// 更新房间文件列表
+	room.mutex.Lock()
+	room.Files = files
+	room.mutex.Unlock()
+
+	log.Printf("房间 %s 文件列表已更新，共 %d 个文件", room.Code, len(files))
+
+	// 通知所有接收方客户端文件列表已更新
+	room.mutex.RLock()
+	for _, client := range room.Clients {
+		if client.Role == "receiver" {
+			message := models.VideoMessage{
+				Type: "file-list-updated",
+				Payload: map[string]interface{}{
+					"files": files,
+				},
+			}
+
+			if err := client.Connection.WriteJSON(message); err != nil {
+				log.Printf("发送文件列表更新消息失败: %v", err)
+			} else {
+				log.Printf("已向接收方 %s 发送文件列表更新消息", client.ID)
+			}
+		}
+	}
+	room.mutex.RUnlock()
+}
+
+// 辅助函数：从map中获取字符串值
+func getString(m map[string]interface{}, key string) string {
+	if val, ok := m[key].(string); ok {
+		return val
+	}
+	return ""
+}
+
+// 辅助函数：从map中获取int64值
+func getInt64(m map[string]interface{}, key string) int64 {
+	if val, ok := m[key].(float64); ok {
+		return int64(val)
+	}
+	if val, ok := m[key].(int64); ok {
+		return val
+	}
+	if val, ok := m[key].(int); ok {
+		return int64(val)
+	}
+	return 0
 }
 
 // handleFileRequest 处理文件请求
