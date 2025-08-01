@@ -51,12 +51,6 @@ export default function HomePage() {
     router.push(`?${params.toString()}`, { scroll: false });
   }, [searchParams, router]);
 
-  // 处理tab切换
-  const handleTabChange = useCallback((value: string) => {
-    setActiveTab(value as 'file' | 'text' | 'desktop');
-    updateUrlParams(value);
-  }, [updateUrlParams]);
-
   // 发送方状态
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [pickupCode, setPickupCode] = useState<string>('');
@@ -80,6 +74,56 @@ export default function HomePage() {
     console.log(`[${type.toUpperCase()}] ${message}`);
     showToast(message, type);
   }, [showToast]);
+
+  // 处理tab切换
+  const handleTabChange = useCallback((value: string) => {
+    // 检查是否已经建立连接或生成取件码
+    const hasActiveConnection = isConnected || pickupCode || isConnecting;
+    
+    if (hasActiveConnection && value !== activeTab) {
+      // 如果已有活跃连接且要切换到不同的tab，在新窗口打开
+      const currentUrl = window.location.origin + window.location.pathname;
+      const newUrl = `${currentUrl}?type=${value}`;
+      
+      // 在新标签页打开
+      window.open(newUrl, '_blank');
+      
+      // 给出提示
+      let currentMode = '';
+      let targetMode = '';
+      
+      switch (activeTab) {
+        case 'file':
+          currentMode = '文件传输';
+          break;
+        case 'text':
+          currentMode = '文字传输';
+          break;
+        case 'desktop':
+          currentMode = '桌面共享';
+          break;
+      }
+      
+      switch (value) {
+        case 'file':
+          targetMode = '文件传输';
+          break;
+        case 'text':
+          targetMode = '文字传输';
+          break;
+        case 'desktop':
+          targetMode = '桌面共享';
+          break;
+      }
+      
+      showNotification(`当前${currentMode}会话进行中，已在新标签页打开${targetMode}`, 'info');
+      return;
+    }
+    
+    // 如果没有活跃连接，正常切换
+    setActiveTab(value as 'file' | 'text' | 'desktop');
+    updateUrlParams(value);
+  }, [updateUrlParams, isConnected, pickupCode, isConnecting, activeTab, showNotification]);
 
   // 初始化文件传输
   const initFileTransfer = useCallback((fileInfo: any) => {
@@ -405,7 +449,7 @@ export default function HomePage() {
         setCurrentRole('sender');
         
         const baseUrl = window.location.origin;
-        const link = `${baseUrl}/?code=${code}`;
+        const link = `${baseUrl}/?type=file&mode=receive&code=${code}`;
         setPickupLink(link);
         
         connect(code, 'sender');
@@ -586,7 +630,6 @@ export default function HomePage() {
         <div className="relative container mx-auto px-4 sm:px-6 py-8 max-w-6xl">
           <Hero />
 
-          {/* Main Interface */}
           <div className="max-w-4xl mx-auto">
             <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
               <TabsList className="grid w-full grid-cols-3 bg-white/80 backdrop-blur-sm border-0 shadow-lg h-12 sm:h-14 p-1 mb-6">
@@ -724,7 +767,6 @@ export default function HomePage() {
                         showNotification(errorMessage, 'error');
                         return ''; // 返回空字符串而不是抛出错误
                       }
-
                       return data.text;
                     } catch (error) {
                       console.error('获取文字内容失败:', error);
@@ -766,7 +808,6 @@ export default function HomePage() {
             </Tabs>
           </div>
           
-          {/* Bottom spacing */}
           <div className="h-8 sm:h-16"></div>
         </div>
       </div>
