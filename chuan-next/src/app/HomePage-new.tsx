@@ -1,14 +1,16 @@
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import FileUpload from '@/components/FileUpload';
-import { FileReceive } from '@/components/FileReceive';
+import Hero from '@/components/Hero';
+import FileTransfer from '@/components/FileTransfer';
+import TextTransfer from '@/components/TextTransfer';
+import DesktopShare from '@/components/DesktopShare';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { FileInfo, TransferProgress, WebSocketMessage, RoomStatus } from '@/types';
-import { Upload, Download } from 'lucide-react';
+import { Upload, MessageSquare, Monitor } from 'lucide-react';
+import { useToast } from '@/components/ui/toast-simple';
 
 interface FileTransferData {
   fileId: string;
@@ -22,8 +24,39 @@ interface FileTransferData {
 
 export default function HomePage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const { websocket, isConnected, connect, disconnect, sendMessage } = useWebSocket();
+  const { showToast } = useToast();
   
+  // URL参数管理
+  const [activeTab, setActiveTab] = useState<'file' | 'text' | 'desktop'>('file');
+  
+  // 从URL参数中获取初始状态
+  useEffect(() => {
+    const type = searchParams.get('type') as 'file' | 'text' | 'desktop';
+    const mode = searchParams.get('mode') as 'send' | 'receive';
+    
+    if (type && ['file', 'text', 'desktop'].includes(type)) {
+      setActiveTab(type);
+    }
+  }, [searchParams]);
+
+  // 更新URL参数
+  const updateUrlParams = useCallback((tab: string, mode?: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('type', tab);
+    if (mode) {
+      params.set('mode', mode);
+    }
+    router.push(`?${params.toString()}`, { scroll: false });
+  }, [searchParams, router]);
+
+  // 处理tab切换
+  const handleTabChange = useCallback((value: string) => {
+    setActiveTab(value as 'file' | 'text' | 'desktop');
+    updateUrlParams(value);
+  }, [updateUrlParams]);
+
   // 发送方状态
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [pickupCode, setPickupCode] = useState<string>('');
@@ -40,11 +73,13 @@ export default function HomePage() {
   
   // 文件传输状态
   const [fileTransfers, setFileTransfers] = useState<Map<string, FileTransferData>>(new Map());
+  const [completedDownloads, setCompletedDownloads] = useState<Set<string>>(new Set());
 
   // 显示通知
   const showNotification = useCallback((message: string, type: 'success' | 'error' | 'info' = 'success') => {
     console.log(`[${type.toUpperCase()}] ${message}`);
-  }, []);
+    showToast(message, type);
+  }, [showToast]);
 
   // 初始化文件传输
   const initFileTransfer = useCallback((fileInfo: any) => {
@@ -128,12 +163,23 @@ export default function HomePage() {
       const transfer = newMap.get(transferKey);
       
       if (transfer) {
+        // 检查是否已经完成，如果已经完成就不再处理新的数据块
+        if (transfer.receivedSize >= transfer.totalSize) {
+          console.log('文件已完成，忽略额外的数据块');
+          return newMap;
+        }
+
         const chunkArray = new Uint8Array(chunkData.data);
         transfer.chunks.push({
           offset: chunkData.offset,
           data: chunkArray
         });
         transfer.receivedSize += chunkArray.length;
+        
+        // 确保不超过总大小
+        if (transfer.receivedSize > transfer.totalSize) {
+          transfer.receivedSize = transfer.totalSize;
+        }
         
         const progress = (transfer.receivedSize / transfer.totalSize) * 100;
         console.log(`文件 ${transferKey} 进度: ${progress.toFixed(2)}%`);
@@ -155,8 +201,14 @@ export default function HomePage() {
         
         // 检查是否完成
         if (chunkData.is_last || transfer.receivedSize >= transfer.totalSize) {
-          console.log('文件接收完成，开始组装下载');
-          assembleAndDownloadFile(transferKey, transfer);
+          console.log('文件接收完成，准备下载');
+          // 标记为完成，等待 file-complete 消息统一处理下载
+          setTransferProgresses(prev => 
+            prev.map(p => p.fileId === transferKey 
+              ? { ...p, status: 'completed' as const, progress: 100, receivedSize: transfer.totalSize }
+              : p
+            )
+          );
         }
       } else {
         console.warn('未找到对应的文件传输:', transferKey);
@@ -164,12 +216,36 @@ export default function HomePage() {
       
       return newMap;
     });
-  }, [assembleAndDownloadFile]);
+  }, []);
 
   // 完成文件下载
   const completeFileDownload = useCallback((fileId: string) => {
-    console.log('文件传输完成:', fileId);
-  }, []);
+    console.log('文件传输完成，开始下载:', fileId);
+    
+    // 检查是否已经完成过下载
+    if (completedDownloads.has(fileId)) {
+      console.log('文件已经下载过，跳过重复下载:', fileId);
+      return;
+    }
+    
+    // 标记为已完成
+    setCompletedDownloads(prev => new Set([...prev, fileId]));
+    
+    // 查找对应的文件传输数据
+    const transfer = fileTransfers.get(fileId);
+    if (transfer) {
+      assembleAndDownloadFile(fileId, transfer);
+      
+      // 清理传输进度，移除已完成的文件进度显示
+      setTimeout(() => {
+        setTransferProgresses(prev => 
+          prev.filter(p => p.fileId !== fileId)
+        );
+      }, 2000); // 2秒后清理，让用户看到完成状态
+    } else {
+      console.warn('未找到文件传输数据:', fileId);
+    }
+  }, [fileTransfers, assembleAndDownloadFile, completedDownloads]);
 
   // 处理文件请求（发送方）
   const handleFileRequest = useCallback(async (payload: any) => {
@@ -345,6 +421,12 @@ export default function HomePage() {
 
   // 加入房间
   const handleJoinRoom = useCallback(async (code: string) => {
+    // 防止重复连接
+    if (isConnecting || (isConnected && pickupCode === code)) {
+      console.log('已在连接中或已连接，跳过重复请求');
+      return;
+    }
+    
     setIsConnecting(true);
     
     try {
@@ -356,7 +438,7 @@ export default function HomePage() {
         setCurrentRole('receiver');
         setReceiverFiles(data.files || []);
         connect(code, 'receiver');
-        showNotification('连接成功！');
+        showNotification('连接成功！', 'success');
       } else {
         showNotification(data.message || '取件码无效或已过期', 'error');
         setIsConnecting(false);
@@ -366,22 +448,30 @@ export default function HomePage() {
       showNotification('连接失败，请检查网络连接', 'error');
       setIsConnecting(false);
     }
-  }, [connect, showNotification]);
+  }, [connect, showNotification, isConnecting, isConnected, pickupCode]);
 
   // 处理URL参数中的取件码
   useEffect(() => {
     const code = searchParams.get('code');
-    if (code && code.length === 6) {
+    if (code && code.length === 6 && !isConnected && pickupCode !== code.toUpperCase()) {
       setCurrentRole('receiver');
       handleJoinRoom(code.toUpperCase());
     }
-  }, [searchParams, handleJoinRoom]);
+  }, [searchParams]); // 移除依赖，只在URL变化时触发
 
   // 下载文件
   const handleDownloadFile = useCallback((fileId: string) => {
     console.log('开始下载文件:', fileId);
     if (!websocket || websocket.readyState !== WebSocket.OPEN) {
       showNotification('连接未建立，请重试', 'error');
+      return;
+    }
+    
+    // 检查是否已有同文件的进行中传输
+    const existingProgress = transferProgresses.find(p => p.originalFileId === fileId && p.status !== 'completed');
+    if (existingProgress) {
+      console.log('文件已在下载中，跳过重复请求:', fileId);
+      showNotification('文件正在下载中...', 'info');
       return;
     }
     
@@ -412,7 +502,7 @@ export default function HomePage() {
       ...prev.filter(p => p.originalFileId !== fileId), // 移除该文件的旧进度记录
       newProgress
     ]);
-  }, [websocket, sendMessage, receiverFiles, showNotification]);
+  }, [websocket, sendMessage, receiverFiles, showNotification, transferProgresses]);
 
   // 通过WebSocket更新文件列表
   const updateFileList = useCallback((files: File[]) => {
@@ -459,114 +549,158 @@ export default function HomePage() {
     disconnect();
   }, [disconnect]);
 
-  // 复制到剪贴板
-  const copyToClipboard = useCallback(async (text: string, message: string) => {
+    // 复制到剪贴板
+  const copyToClipboard = useCallback(async (text: string, successMessage: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      showNotification(message);
-    } catch (error) {
+      showNotification(successMessage, 'success');
+    } catch (err) {
+      console.error('复制失败:', err);
       showNotification('复制失败，请手动复制', 'error');
     }
   }, [showNotification]);
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto py-8 px-4">
-        <div className="max-w-4xl mx-auto">
-          <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold mb-2">文件快传</h1>
-            <p className="text-muted-foreground">
-              安全、快速的P2P文件传输服务
-            </p>
-          </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+      {/* Hero Section */}
+      <div className="relative min-h-screen">
+        {/* Background decorations */}
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-blue-400/20 to-indigo-600/20 rounded-full blur-3xl"></div>
+          <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-gradient-to-br from-purple-400/20 to-pink-400/20 rounded-full blur-3xl"></div>
+        </div>
+        
+        <div className="relative container mx-auto px-4 sm:px-6 py-8 max-w-6xl">
+          <Hero />
 
-          <Tabs defaultValue="send" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="send" className="flex items-center space-x-2">
-                <Upload className="w-4 h-4" />
-                <span>发送文件</span>
-              </TabsTrigger>
-              <TabsTrigger value="receive" className="flex items-center space-x-2">
-                <Download className="w-4 h-4" />
-                <span>接收文件</span>
-              </TabsTrigger>
-            </TabsList>
+          {/* Main Interface */}
+          <div className="max-w-4xl mx-auto">
+            <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+              <TabsList className="grid w-full grid-cols-3 bg-white/80 backdrop-blur-sm border-0 shadow-lg h-12 sm:h-14 p-1 mb-6">
+                <TabsTrigger 
+                  value="file" 
+                  className="flex items-center justify-center space-x-2 text-sm sm:text-base font-medium data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-300"
+                >
+                  <Upload className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <span className="hidden sm:inline">传文件</span>
+                  <span className="sm:hidden">文件</span>
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="text" 
+                  className="flex items-center justify-center space-x-2 text-sm sm:text-base font-medium data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-teal-500 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-300"
+                >
+                  <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <span className="hidden sm:inline">传文字</span>
+                  <span className="sm:hidden">文字</span>
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="desktop" 
+                  className="flex items-center justify-center space-x-2 text-sm sm:text-base font-medium data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-pink-500 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-300"
+                >
+                  <Monitor className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <span className="hidden sm:inline">共享桌面</span>
+                  <span className="sm:hidden">桌面</span>
+                </TabsTrigger>
+              </TabsList>
 
-            <TabsContent value="send" className="mt-6">
-              <FileUpload
-                selectedFiles={selectedFiles}
-                onFilesChange={setSelectedFiles}
-                onGenerateCode={handleGenerateCode}
-                pickupCode={pickupCode}
-                pickupLink={pickupLink}
-                onCopyCode={() => copyToClipboard(pickupCode, '取件码已复制到剪贴板！')}
-                onCopyLink={() => copyToClipboard(pickupLink, '取件链接已复制到剪贴板！')}
-                onAddMoreFiles={() => {
-                  const input = document.createElement('input');
-                  input.type = 'file';
-                  input.multiple = true;
-                  input.onchange = async (e) => {
-                    const files = Array.from((e.target as HTMLInputElement).files || []);
-                    const newFiles = [...selectedFiles, ...files];
-                    setSelectedFiles(newFiles);
-                    
-                    // 如果已经生成了取件码，更新后端文件列表
-                    if (pickupCode && files.length > 0) {
-                      updateFileList(newFiles);
-                    }
-                  };
-                  input.click();
-                }}
-                onRemoveFile={handleRemoveFile}
-                onReset={handleReset}
-                disabled={isConnecting}
-              />
-              
-              {roomStatus && currentRole === 'sender' && (
-                <Card className="mt-6">
-                  <CardHeader>
-                    <CardTitle>房间状态</CardTitle>
-                    <CardDescription>
-                      当前在线用户情况
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-3 gap-4 text-center">
-                      <div>
-                        <div className="text-2xl font-bold text-primary">
-                          {roomStatus.sender_count + roomStatus.receiver_count}
+              <TabsContent value="file" className="mt-6 animate-fade-in-up">
+                <FileTransfer
+                  selectedFiles={selectedFiles}
+                  onFilesChange={setSelectedFiles}
+                  onGenerateCode={handleGenerateCode}
+                  pickupCode={pickupCode}
+                  pickupLink={pickupLink}
+                  onCopyCode={() => copyToClipboard(pickupCode, '取件码已复制到剪贴板！')}
+                  onCopyLink={() => copyToClipboard(pickupLink, '取件链接已复制到剪贴板！')}
+                  onAddMoreFiles={() => {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.multiple = true;
+                    input.onchange = async (e) => {
+                      const files = Array.from((e.target as HTMLInputElement).files || []);
+                      const newFiles = [...selectedFiles, ...files];
+                      setSelectedFiles(newFiles);
+                      
+                      if (pickupCode && files.length > 0) {
+                        updateFileList(newFiles);
+                      }
+                    };
+                    input.click();
+                  }}
+                  onRemoveFile={handleRemoveFile}
+                  onReset={handleReset}
+                  onJoinRoom={handleJoinRoom}
+                  receiverFiles={receiverFiles}
+                  onDownloadFile={handleDownloadFile}
+                  transferProgresses={transferProgresses}
+                  isConnected={isConnected}
+                  isConnecting={isConnecting}
+                  disabled={isConnecting}
+                />
+                
+                {roomStatus && currentRole === 'sender' && (
+                  <div className="mt-6 glass-card rounded-2xl p-6 animate-fade-in-up">
+                    <h3 className="text-xl font-semibold text-slate-800 mb-4 text-center">实时状态</h3>
+                    <div className="grid grid-cols-3 gap-6">
+                      <div className="text-center p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl">
+                        <div className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                          {(roomStatus?.sender_count || 0) + (roomStatus?.receiver_count || 0)}
                         </div>
-                        <div className="text-sm text-muted-foreground">总在线</div>
+                        <div className="text-sm text-slate-600 mt-1">在线用户</div>
                       </div>
-                      <div>
-                        <div className="text-2xl font-bold text-blue-600">
-                          {roomStatus.sender_count}
+                      <div className="text-center p-4 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl">
+                        <div className="text-3xl font-bold text-emerald-600">
+                          {roomStatus?.sender_count || 0}
                         </div>
-                        <div className="text-sm text-muted-foreground">发送方</div>
+                        <div className="text-sm text-slate-600 mt-1">发送方</div>
                       </div>
-                      <div>
-                        <div className="text-2xl font-bold text-green-600">
-                          {roomStatus.receiver_count}
+                      <div className="text-center p-4 bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl">
+                        <div className="text-3xl font-bold text-purple-600">
+                          {roomStatus?.receiver_count || 0}
                         </div>
-                        <div className="text-sm text-muted-foreground">接收方</div>
+                        <div className="text-sm text-slate-600 mt-1">接收方</div>
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
-              )}
-            </TabsContent>
+                  </div>
+                )}
+              </TabsContent>
 
-            <TabsContent value="receive" className="mt-6">
-              <FileReceive
-                onJoinRoom={handleJoinRoom}
-                files={receiverFiles}
-                onDownloadFile={handleDownloadFile}
-                transferProgresses={transferProgresses}
-                isConnected={isConnected}
-                isConnecting={isConnecting}
-              />
-            </TabsContent>
-          </Tabs>
+              <TabsContent value="text" className="mt-6 animate-fade-in-up">
+                <TextTransfer
+                  onSendText={async (text: string) => {
+                    // TODO: 实现文字传输功能
+                    showNotification('文字传输功能开发中', 'info');
+                    return 'ABC123'; // 模拟返回取件码
+                  }}
+                  onReceiveText={async (code: string) => {
+                    // TODO: 实现文字接收功能
+                    showNotification('文字传输功能开发中', 'info');
+                    return '示例文本内容'; // 模拟返回文本
+                  }}
+                />
+              </TabsContent>
+
+              <TabsContent value="desktop" className="mt-6 animate-fade-in-up">
+                <DesktopShare
+                  onStartSharing={async () => {
+                    // TODO: 实现桌面共享功能
+                    showNotification('桌面共享功能开发中', 'info');
+                    return 'DEF456'; // 模拟返回连接码
+                  }}
+                  onStopSharing={async () => {
+                    showNotification('桌面共享已停止', 'info');
+                  }}
+                  onJoinSharing={async (code: string) => {
+                    // TODO: 实现桌面查看功能
+                    showNotification('桌面共享功能开发中', 'info');
+                  }}
+                />
+              </TabsContent>
+            </Tabs>
+          </div>
+          
+          {/* Bottom spacing */}
+          <div className="h-8 sm:h-16"></div>
         </div>
       </div>
     </div>

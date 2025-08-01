@@ -1,36 +1,65 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 传传传 - 跨平台文件传输工具
 
-## Getting Started
+> 简单、快速、安全的点对点文件传输解决方案
 
-First, run the development server:
+## ✨ 核心功能
+
+- 📁 **文件传输** - 支持多文件同时传输，断点续传
+- 📝 **文字传输** - 快速分享文本内容  
+- 🖥️ **桌面共享** - 实时屏幕共享（开发中）
+- 🔗 **URL路由** - 支持直链分享特定功能
+
+## 🚀 技术栈
+
+- **前端**: Next.js 15 + React 18 + TypeScript + Tailwind CSS
+- **后端**: Go + WebSocket + Gin框架
+- **部署**: Docker + Docker Compose
+
+## 📦 快速开始
+
+### 本地开发
 
 ```bash
+# 克隆项目
+git clone https://github.com/MatrixSeven/file-transfer-go.git
+cd file-transfer-go
+
+# 启动后端服务
+make dev
+
+# 启动前端服务
+cd chuan-next
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Docker部署
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+# 一键启动所有服务
+docker-compose up -d
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+# 访问应用
+open http://localhost:8080
+```
 
-## Learn More
+## 🎯 URL参数
 
-To learn more about Next.js, take a look at the following resources:
+支持通过URL直接跳转到特定功能：
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```
+/?type=file&mode=send     # 文件传输-发送
+/?type=text&mode=receive  # 文字传输-接收  
+/?type=desktop&mode=send  # 桌面共享-共享
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 🌟 特色
 
-## Deploy on Vercel
+- ⚡ **零配置** - 无需注册登录，即开即用
+- 🔒 **端到端** - 点对点传输，服务器不存储文件
+- 📱 **响应式** - 完美适配手机、平板、电脑
+- 🎨 **现代UI** - 精美的毛玻璃效果界面
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 📄 许可证
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+MIT License
