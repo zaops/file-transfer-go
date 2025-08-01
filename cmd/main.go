@@ -42,9 +42,9 @@ func main() {
 		MaxAge:           300,
 	}))
 
-	// 静态文件服务
-	fileServer := http.FileServer(http.Dir("./web/static/"))
-	r.Handle("/static/*", http.StripPrefix("/static", fileServer))
+	// // 静态文件服务
+	// fileServer := http.FileServer(http.Dir("./web/static/"))
+	// r.Handle("/static/*", http.StripPrefix("/static", fileServer))
 
 	// 路由定义
 	r.Get("/", h.IndexHandler)

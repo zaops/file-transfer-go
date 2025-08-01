@@ -22,7 +22,7 @@ func NewHandler(p2pService *services.P2PService) *Handler {
 	}
 
 	// 加载模板
-	h.loadTemplates()
+	// h.loadTemplates()
 	return h
 }
 
