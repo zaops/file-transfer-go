@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getBackendUrl } from '@/lib/config';
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,7 +14,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 调用后端API创建文字传输房间
-    const response = await fetch('http://localhost:8080/api/create-text-room', {
+    const response = await fetch(getBackendUrl('/api/create-text-room'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

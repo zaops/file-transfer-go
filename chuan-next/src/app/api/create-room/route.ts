@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-const GO_BACKEND_URL = process.env.GO_BACKEND_URL || 'http://localhost:8080';
+import { getBackendUrl } from '@/lib/config';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     
+    // 使用配置管理获取后端URL
+    const backendUrl = getBackendUrl('/api/create-room');
+    
     // 转发请求到Go后端
-    const response = await fetch(`${GO_BACKEND_URL}/api/create-room`, {
+    const response = await fetch(backendUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

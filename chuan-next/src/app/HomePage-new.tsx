@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 import Hero from '@/components/Hero';
 import FileTransfer from '@/components/FileTransfer';
 import TextTransfer from '@/components/TextTransfer';
@@ -30,6 +32,10 @@ export default function HomePage() {
   
   // URL参数管理
   const [activeTab, setActiveTab] = useState<'file' | 'text' | 'desktop'>('file');
+  
+  // 确认对话框状态
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [pendingTabSwitch, setPendingTabSwitch] = useState<string>('');
   
   // 从URL参数中获取初始状态
   useEffect(() => {
@@ -81,49 +87,37 @@ export default function HomePage() {
     const hasActiveConnection = isConnected || pickupCode || isConnecting;
     
     if (hasActiveConnection && value !== activeTab) {
-      // 如果已有活跃连接且要切换到不同的tab，在新窗口打开
-      const currentUrl = window.location.origin + window.location.pathname;
-      const newUrl = `${currentUrl}?type=${value}`;
-      
-      // 在新标签页打开
-      window.open(newUrl, '_blank');
-      
-      // 给出提示
-      let currentMode = '';
-      let targetMode = '';
-      
-      switch (activeTab) {
-        case 'file':
-          currentMode = '文件传输';
-          break;
-        case 'text':
-          currentMode = '文字传输';
-          break;
-        case 'desktop':
-          currentMode = '桌面共享';
-          break;
-      }
-      
-      switch (value) {
-        case 'file':
-          targetMode = '文件传输';
-          break;
-        case 'text':
-          targetMode = '文字传输';
-          break;
-        case 'desktop':
-          targetMode = '桌面共享';
-          break;
-      }
-      
-      showNotification(`当前${currentMode}会话进行中，已在新标签页打开${targetMode}`, 'info');
+      // 如果已有活跃连接且要切换到不同的tab，显示确认对话框
+      setPendingTabSwitch(value);
+      setShowConfirmDialog(true);
       return;
     }
     
     // 如果没有活跃连接，正常切换
     setActiveTab(value as 'file' | 'text' | 'desktop');
     updateUrlParams(value);
-  }, [updateUrlParams, isConnected, pickupCode, isConnecting, activeTab, showNotification]);
+  }, [updateUrlParams, isConnected, pickupCode, isConnecting, activeTab]);
+
+  // 确认切换tab
+  const confirmTabSwitch = useCallback(() => {
+    if (pendingTabSwitch) {
+      const currentUrl = window.location.origin + window.location.pathname;
+      const newUrl = `${currentUrl}?type=${pendingTabSwitch}`;
+      
+      // 在新标签页打开
+      window.open(newUrl, '_blank');
+      
+      // 关闭对话框并清理状态
+      setShowConfirmDialog(false);
+      setPendingTabSwitch('');
+    }
+  }, [pendingTabSwitch]);
+
+  // 取消切换tab
+  const cancelTabSwitch = useCallback(() => {
+    setShowConfirmDialog(false);
+    setPendingTabSwitch('');
+  }, []);
 
   // 初始化文件传输
   const initFileTransfer = useCallback((fileInfo: any) => {
@@ -811,6 +805,55 @@ export default function HomePage() {
           <div className="h-8 sm:h-16"></div>
         </div>
       </div>
+
+      {/* 确认对话框 */}
+      <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>切换传输模式</DialogTitle>
+            <DialogDescription>
+              {(() => {
+                let currentMode = '';
+                let targetMode = '';
+                
+                switch (activeTab) {
+                  case 'file':
+                    currentMode = '文件传输';
+                    break;
+                  case 'text':
+                    currentMode = '文字传输';
+                    break;
+                  case 'desktop':
+                    currentMode = '桌面共享';
+                    break;
+                }
+                
+                switch (pendingTabSwitch) {
+                  case 'file':
+                    targetMode = '文件传输';
+                    break;
+                  case 'text':
+                    targetMode = '文字传输';
+                    break;
+                  case 'desktop':
+                    targetMode = '桌面共享';
+                    break;
+                }
+                
+                return `当前${currentMode}会话进行中，是否要在新标签页中打开${targetMode}？`;
+              })()}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={cancelTabSwitch}>
+              取消
+            </Button>
+            <Button onClick={confirmTabSwitch}>
+              确认打开
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

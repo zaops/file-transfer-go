@@ -4,9 +4,15 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
+    "dev:prod": "NODE_ENV=production next dev --turbopack",
     "build": "next build",
+    "build:dev": "NODE_ENV=development next build",
+    "build:prod": "NODE_ENV=production next build",
     "start": "next start",
-    "lint": "next lint"
+    "start:dev": "NODE_ENV=development next start",
+    "start:prod": "NODE_ENV=production next start",
+    "lint": "next lint",
+    "env:check": "node -e \"console.log('Environment:', process.env.NODE_ENV); console.log('GO_BACKEND_URL:', process.env.GO_BACKEND_URL);\""
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.1.10",

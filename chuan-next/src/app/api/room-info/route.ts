@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-const GO_BACKEND_URL = process.env.GO_BACKEND_URL || 'http://localhost:8080';
+import { getBackendUrl } from '@/lib/config';
 
 export async function GET(request: NextRequest) {
   try {
@@ -15,7 +14,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 转发请求到Go后端
-    const response = await fetch(`${GO_BACKEND_URL}/api/room-info?code=${code}`, {
+    const response = await fetch(getBackendUrl(`/api/room-info?code=${code}`), {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
