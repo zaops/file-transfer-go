@@ -56,6 +56,10 @@ func main() {
 	r.Get("/api/room-status", h.GetRoomStatusHandler)
 	r.Post("/api/update-room-files", h.UpdateRoomFilesHandler)
 
+	// 文字传输API路由
+	r.Post("/api/create-text-room", h.CreateTextRoomHandler)
+	r.Get("/api/get-text-content/*", h.GetTextContentHandler)
+
 	// 启动服务器
 	srv := &http.Server{
 		Addr:         ":8080",

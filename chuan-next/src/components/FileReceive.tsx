@@ -57,6 +57,50 @@ export function FileReceive({
     }
   }, []);
 
+  // 如果已经连接但没有文件，显示等待界面
+  if ((isConnected || isConnecting) && files.length === 0) {
+    return (
+      <div className="glass-card rounded-2xl p-4 sm:p-6 md:p-8 animate-fade-in-up">
+        <div className="text-center">
+          <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-4 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-2xl flex items-center justify-center animate-float">
+            <Download className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
+          </div>
+          <h2 className="text-xl sm:text-2xl font-semibold text-slate-800 mb-2">等待文件</h2>
+          <p className="text-sm sm:text-base text-slate-600 mb-6">
+            {isConnected ? '已连接到房间，等待发送方选择文件...' : '正在连接到房间...'}
+          </p>
+          
+          {/* 连接状态指示器 */}
+          <div className="flex items-center justify-center space-x-4 mb-6">
+            <div className="flex items-center">
+              <div className={`w-3 h-3 rounded-full mr-2 ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-orange-500 animate-spin'}`}></div>
+              <span className={`text-sm font-medium ${isConnected ? 'text-emerald-600' : 'text-orange-600'}`}>
+                {isConnected ? '连接已建立' : '连接中...'}
+              </span>
+            </div>
+          </div>
+
+          {/* 等待动画 */}
+          <div className="flex justify-center space-x-1 mb-6">
+            {[...Array(3)].map((_, i) => (
+              <div
+                key={i}
+                className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"
+                style={{ animationDelay: `${i * 0.1}s` }}
+              ></div>
+            ))}
+          </div>
+
+          <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200">
+            <p className="text-xs sm:text-sm text-slate-600 text-center">
+              💡 <span className="font-medium">提示：</span>房间已连接，发送方清空文件列表后您会看到此界面，等待对方重新选择文件
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // 如果已经连接并且有文件列表，显示文件列表
   if (files.length > 0) {
     return (

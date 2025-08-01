@@ -4,7 +4,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { MessageSquare, Copy, Send, Download, Image, Users, Link } from 'lucide-react';
+import { MessageSquare, Copy, Send, Download, Image, Users } from 'lucide-react';
 import { useToast } from '@/components/ui/toast-simple';
 
 interface TextTransferProps {
@@ -14,7 +14,6 @@ interface TextTransferProps {
   isConnected?: boolean;
   currentRole?: 'sender' | 'receiver';
   pickupCode?: string;
-  onCreateWebSocket?: (code: string, role: 'sender' | 'receiver') => void; // 创建WebSocket连接
 }
 
 export default function TextTransfer({ 
@@ -23,8 +22,7 @@ export default function TextTransfer({
   websocket, 
   isConnected = false,
   currentRole,
-  pickupCode,
-  onCreateWebSocket
+  pickupCode
 }: TextTransferProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -40,53 +38,15 @@ export default function TextTransfer({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 从URL参数中获取初始模式和房间码
+  // 从URL参数中获取初始模式
   useEffect(() => {
     const urlMode = searchParams.get('mode') as 'send' | 'receive';
     const type = searchParams.get('type');
-    const urlCode = searchParams.get('code');
     
     if (type === 'text' && urlMode && ['send', 'receive'].includes(urlMode)) {
       setMode(urlMode);
-      
-      // 如果URL中有房间码且是接收模式，自动填入房间码
-      if (urlMode === 'receive' && urlCode && urlCode.length === 6) {
-        setRoomCode(urlCode.toUpperCase());
-        // 自动尝试加入房间
-        setTimeout(() => {
-          if (onReceiveText) {
-            handleJoinRoomWithCode(urlCode.toUpperCase());
-          }
-        }, 500); // 延迟500ms确保组件完全初始化
-      }
     }
   }, [searchParams]);
-
-  // 处理通过URL参数自动加入房间
-  const handleJoinRoomWithCode = useCallback(async (code: string) => {
-    if (!code || code.length !== 6) return;
-
-    setIsLoading(true);
-    try {
-      if (onReceiveText) {
-        const text = await onReceiveText(code);
-        if (text) {
-          setReceivedText(text);
-          showToast('自动加入房间成功！', 'success');
-          
-          // 创建WebSocket连接用于实时同步
-          if (onCreateWebSocket) {
-            onCreateWebSocket(code, 'receiver');
-          }
-        }
-      }
-    } catch (error) {
-      console.error('自动加入房间失败:', error);
-      // 错误信息已经在HomePage中处理了
-    } finally {
-      setIsLoading(false);
-    }
-  }, [onReceiveText, onCreateWebSocket, showToast]);
 
   // 监听WebSocket消息
   useEffect(() => {
@@ -189,24 +149,17 @@ export default function TextTransfer({
     try {
       if (onSendText) {
         const code = await onSendText(textContent);
-        if (code) { // 只有在成功创建房间时才设置状态和显示成功消息
-          setRoomCode(code);
-          setIsRoomCreated(true);
-          showToast('房间创建成功！', 'success');
-          
-          // 创建WebSocket连接用于实时同步
-          if (onCreateWebSocket) {
-            onCreateWebSocket(code, 'sender');
-          }
-        }
+        setRoomCode(code);
+        setIsRoomCreated(true);
+        showToast('房间创建成功！', 'success');
       }
     } catch (error) {
       console.error('创建房间失败:', error);
-      // 错误信息已经在HomePage中处理了，这里不再重复显示
+      showToast('创建房间失败，请重试', 'error');
     } finally {
       setIsLoading(false);
     }
-  }, [textContent, onSendText, onCreateWebSocket, showToast]);
+  }, [textContent, onSendText, showToast]);
 
   // 加入房间
   const handleJoinRoom = useCallback(async () => {
@@ -219,23 +172,16 @@ export default function TextTransfer({
     try {
       if (onReceiveText) {
         const text = await onReceiveText(roomCode);
-        if (text) { // 只有在成功获取到文字时才设置状态和显示成功消息
-          setReceivedText(text);
-          showToast('成功加入房间！', 'success');
-          
-          // 创建WebSocket连接用于实时同步
-          if (onCreateWebSocket) {
-            onCreateWebSocket(roomCode, 'receiver');
-          }
-        }
+        setReceivedText(text);
+        showToast('成功加入房间！', 'success');
       }
     } catch (error) {
       console.error('加入房间失败:', error);
-      // 错误信息已经在HomePage中处理了，这里不再重复显示
+      showToast('加入房间失败，请检查房间码', 'error');
     } finally {
       setIsLoading(false);
     }
-  }, [roomCode, onReceiveText, onCreateWebSocket, showToast]);
+  }, [roomCode, onReceiveText, showToast]);
 
   // 发送文字
   const handleSendText = useCallback(() => {
@@ -288,13 +234,6 @@ export default function TextTransfer({
     }
   }, [showToast]);
 
-  // 复制传输链接
-  const copyTransferLink = useCallback(async (code: string) => {
-    const currentUrl = window.location.origin + window.location.pathname;
-    const transferLink = `${currentUrl}?type=text&mode=receive&code=${code}`;
-    await copyToClipboard(transferLink);
-  }, [copyToClipboard]);
-
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* 模式切换 */}
@@ -329,25 +268,12 @@ export default function TextTransfer({
             <p className="text-sm sm:text-base text-slate-600">
               {isRoomCreated ? '实时编辑，对方可以同步看到' : '输入要传输的文本内容'}
             </p>
-            {/* 连接状态显示 */}
-            <div className="mt-2 space-y-1">
-              {isRoomCreated && (
-                <div className="flex items-center justify-center space-x-4 text-sm">
-                  <div className="flex items-center">
-                    <div className={`w-2 h-2 rounded-full mr-2 ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`}></div>
-                    <span className={isConnected ? 'text-emerald-600' : 'text-red-600'}>
-                      {isConnected ? '实时连接已建立' : '连接断开'}
-                    </span>
-                  </div>
-                  {connectedUsers > 0 && (
-                    <div className="flex items-center text-blue-600">
-                      <Users className="w-4 h-4 mr-1" />
-                      {connectedUsers} 人在线
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+            {connectedUsers > 1 && (
+              <div className="flex items-center justify-center mt-2 text-sm text-emerald-600">
+                <Users className="w-4 h-4 mr-1" />
+                {connectedUsers} 人在线
+              </div>
+            )}
           </div>
 
           <div className="space-y-4">
@@ -357,23 +283,15 @@ export default function TextTransfer({
                 value={textContent}
                 onChange={handleTextChange}
                 onPaste={handlePaste}
-                placeholder="在这里输入要传输的文本内容...&#10;&#10;💡 提示：支持实时同步编辑，可以直接粘贴图片 (Ctrl+V)"
-                className="w-full min-h-[150px] p-4 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:ring-blue-500 bg-white/80 backdrop-blur-sm resize-none"
+                placeholder="在这里输入要传输的文本内容...&#10;&#10;💡 提示：&#10;• 支持实时同步编辑&#10;• 可以直接粘贴图片 (Ctrl+V)"
+                className="w-full min-h-[300px] p-4 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:ring-blue-500 bg-white/80 backdrop-blur-sm resize-none"
                 disabled={isLoading}
               />
-              {isRoomCreated && isConnected && (
+              {isRoomCreated && (
                 <div className="absolute top-2 right-2">
                   <div className="flex items-center space-x-1 bg-emerald-100 text-emerald-700 px-2 py-1 rounded-lg text-xs">
                     <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
                     <span>实时同步</span>
-                  </div>
-                </div>
-              )}
-              {isRoomCreated && !isConnected && (
-                <div className="absolute top-2 right-2">
-                  <div className="flex items-center space-x-1 bg-orange-100 text-orange-700 px-2 py-1 rounded-lg text-xs">
-                    <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
-                    <span>连接中...</span>
                   </div>
                 </div>
               )}
@@ -408,33 +326,23 @@ export default function TextTransfer({
                   <div className="text-center">
                     <p className="text-sm text-emerald-700 mb-2">房间码</p>
                     <div className="text-2xl font-bold font-mono text-emerald-600 mb-3">{roomCode}</div>
-                    <div className="flex flex-wrap gap-2 justify-center">
-                      <Button
-                        onClick={() => copyToClipboard(roomCode)}
-                        size="sm"
-                        className="bg-emerald-500 hover:bg-emerald-600 text-white"
-                      >
-                        <Copy className="w-4 h-4 mr-2" />
-                        复制房间码
-                      </Button>
-                      <Button
-                        onClick={() => copyTransferLink(roomCode)}
-                        size="sm"
-                        className="bg-purple-500 hover:bg-purple-600 text-white"
-                      >
-                        <Link className="w-4 h-4 mr-2" />
-                        复制链接
-                      </Button>
-                      <Button
-                        onClick={handleSendText}
-                        size="sm"
-                        className="bg-blue-500 hover:bg-blue-600 text-white"
-                        disabled={!textContent.trim()}
-                      >
-                        <Send className="w-4 h-4 mr-2" />
-                        发送文字
-                      </Button>
-                    </div>
+                    <Button
+                      onClick={() => copyToClipboard(roomCode)}
+                      size="sm"
+                      className="bg-emerald-500 hover:bg-emerald-600 text-white mr-2"
+                    >
+                      <Copy className="w-4 h-4 mr-2" />
+                      复制房间码
+                    </Button>
+                    <Button
+                      onClick={handleSendText}
+                      size="sm"
+                      className="bg-blue-500 hover:bg-blue-600 text-white"
+                      disabled={!textContent.trim()}
+                    >
+                      <Send className="w-4 h-4 mr-2" />
+                      发送文字
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -472,26 +380,6 @@ export default function TextTransfer({
             </div>
             <h2 className="text-xl sm:text-2xl font-semibold text-slate-800 mb-2">接收文字</h2>
             <p className="text-sm sm:text-base text-slate-600">输入6位房间码来获取文字内容</p>
-            
-            {/* 连接状态显示 */}
-            {(receivedText || textContent) && (
-              <div className="mt-2 space-y-1">
-                <div className="flex items-center justify-center space-x-4 text-sm">
-                  <div className="flex items-center">
-                    <div className={`w-2 h-2 rounded-full mr-2 ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`}></div>
-                    <span className={isConnected ? 'text-emerald-600' : 'text-red-600'}>
-                      {isConnected ? '实时连接已建立' : '连接断开'}
-                    </span>
-                  </div>
-                  {connectedUsers > 0 && (
-                    <div className="flex items-center text-blue-600">
-                      <Users className="w-4 h-4 mr-1" />
-                      {connectedUsers} 人在线
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
           </div>
 
           <div className="space-y-4">
@@ -529,21 +417,13 @@ export default function TextTransfer({
                     value={receivedText || textContent}
                     readOnly={currentRole !== 'receiver'}
                     onChange={currentRole === 'receiver' ? handleTextChange : undefined}
-                    className="w-full min-h-[150px] p-4 border-2 border-emerald-200 rounded-xl bg-emerald-50/50 backdrop-blur-sm resize-none"
+                    className="w-full min-h-[300px] p-4 border-2 border-emerald-200 rounded-xl bg-emerald-50/50 backdrop-blur-sm resize-none"
                   />
                   {currentRole === 'receiver' && isConnected && (
                     <div className="absolute top-2 right-2">
                       <div className="flex items-center space-x-1 bg-emerald-100 text-emerald-700 px-2 py-1 rounded-lg text-xs">
                         <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
                         <span>实时同步</span>
-                      </div>
-                    </div>
-                  )}
-                  {currentRole === 'receiver' && !isConnected && (
-                    <div className="absolute top-2 right-2">
-                      <div className="flex items-center space-x-1 bg-orange-100 text-orange-700 px-2 py-1 rounded-lg text-xs">
-                        <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
-                        <span>连接中...</span>
                       </div>
                     </div>
                   )}

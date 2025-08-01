@@ -15,6 +15,7 @@ interface FileUploadProps {
   onCopyLink?: () => void;
   onAddMoreFiles?: () => void;
   onRemoveFile?: (updatedFiles: File[]) => void;
+  onClearFiles?: () => void;
   onReset?: () => void;
   disabled?: boolean;
 }
@@ -45,8 +46,9 @@ export default function FileUpload({
   onCopyLink,
   onAddMoreFiles,
   onRemoveFile,
+  onClearFiles,
   onReset,
-  disabled = false,
+  disabled = false
 }: FileUploadProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -66,7 +68,6 @@ export default function FileUpload({
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
-    
     const files = Array.from(e.dataTransfer.files);
     if (files.length > 0) {
       onFilesChange([...selectedFiles, ...files]);
@@ -81,22 +82,24 @@ export default function FileUpload({
   }, [selectedFiles, onFilesChange]);
 
   const removeFile = useCallback((index: number) => {
-    const newFiles = selectedFiles.filter((_, i) => i !== index);
-    onFilesChange(newFiles);
-    // 如果已经生成了取件码，同步删除操作到接收端
+    const updatedFiles = selectedFiles.filter((_, i) => i !== index);
+    onFilesChange(updatedFiles);
     if (onRemoveFile) {
-      onRemoveFile(newFiles);
+      onRemoveFile(updatedFiles);
     }
   }, [selectedFiles, onFilesChange, onRemoveFile]);
 
   const handleClick = useCallback(() => {
-    fileInputRef.current?.click();
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
   }, []);
 
-  if (selectedFiles.length === 0) {
+  // 如果没有选择文件，显示上传区域
+  if (selectedFiles.length === 0 && !pickupCode) {
     return (
-      <div className="glass-card rounded-2xl p-8 animate-fade-in-up">
-        <div className="text-center mb-6">
+      <div className="space-y-6">
+        <div className="text-center">
           <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-2xl flex items-center justify-center animate-float">
             <Upload className="w-8 h-8 text-white" />
           </div>
@@ -220,23 +223,36 @@ export default function FileUpload({
           )}
           
           {pickupCode && (
-            <Button
-              variant="outline"
-              onClick={onAddMoreFiles}
-              disabled={disabled}
-              className="px-6 py-3 rounded-xl border-slate-300 text-slate-600 hover:bg-slate-50 flex-1"
-            >
-              添加更多文件
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                onClick={onAddMoreFiles}
+                disabled={disabled}
+                className="px-6 py-3 rounded-xl border-slate-300 text-slate-600 hover:bg-slate-50 flex-1"
+              >
+                添加更多文件
+              </Button>
+              
+              {selectedFiles.length > 0 && onClearFiles && (
+                <Button
+                  variant="outline"
+                  onClick={onClearFiles}
+                  disabled={disabled}
+                  className="px-6 py-3 rounded-xl border-orange-300 text-orange-600 hover:bg-orange-50"
+                >
+                  清空文件
+                </Button>
+              )}
+            </>
           )}
           
           <Button
             variant="outline"
             onClick={onReset}
             disabled={disabled}
-            className="px-6 py-3 rounded-xl border-slate-300 text-slate-600 hover:bg-slate-50"
+            className="px-6 py-3 rounded-xl border-red-300 text-red-600 hover:bg-red-50"
           >
-            重置
+            关闭房间
           </Button>
         </div>
       </div>

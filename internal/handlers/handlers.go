@@ -186,6 +186,78 @@ func (h *Handler) UpdateRoomFilesHandler(w http.ResponseWriter, r *http.Request)
 	json.NewEncoder(w).Encode(response)
 }
 
+// CreateTextRoomHandler 创建文字传输房间API
+func (h *Handler) CreateTextRoomHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "方法不允许", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Text string `json:"text"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "解析请求失败", http.StatusBadRequest)
+		return
+	}
+
+	if req.Text == "" {
+		http.Error(w, "文本内容不能为空", http.StatusBadRequest)
+		return
+	}
+
+	if len(req.Text) > 50000 {
+		http.Error(w, "文本内容过长，最大支持50,000字符", http.StatusBadRequest)
+		return
+	}
+
+	// 创建文字传输房间
+	code := h.p2pService.CreateTextRoom(req.Text)
+
+	response := map[string]interface{}{
+		"success": true,
+		"code":    code,
+		"message": "文字传输房间创建成功",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// GetTextContentHandler 获取文字内容API
+func (h *Handler) GetTextContentHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "方法不允许", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// 从URL路径中提取code
+	path := r.URL.Path
+	code := path[len("/api/get-text-content/"):]
+
+	if code == "" || len(code) != 6 {
+		http.Error(w, "请提供正确的6位房间码", http.StatusBadRequest)
+		return
+	}
+
+	// 获取文字内容
+	text, exists := h.p2pService.GetTextContent(code)
+	if !exists {
+		http.Error(w, "房间不存在或已过期", http.StatusNotFound)
+		return
+	}
+
+	response := map[string]interface{}{
+		"success": true,
+		"text":    text,
+		"message": "文字内容获取成功",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
 // HandleP2PWebSocket 处理P2P WebSocket连接
 func (h *Handler) HandleP2PWebSocket(w http.ResponseWriter, r *http.Request) {
 	h.p2pService.HandleWebSocket(w, r)

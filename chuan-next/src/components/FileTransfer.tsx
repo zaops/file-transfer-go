@@ -19,6 +19,7 @@ interface FileTransferProps {
   onCopyLink: () => void;
   onAddMoreFiles: () => void;
   onRemoveFile: (updatedFiles: File[]) => void;
+  onClearFiles?: () => void;
   onReset: () => void;
   
   // 接收方相关
@@ -43,6 +44,7 @@ export default function FileTransfer({
   onCopyLink,
   onAddMoreFiles,
   onRemoveFile,
+  onClearFiles,
   onReset,
   onJoinRoom,
   receiverFiles,
@@ -111,6 +113,7 @@ export default function FileTransfer({
             onCopyLink={onCopyLink}
             onAddMoreFiles={onAddMoreFiles}
             onRemoveFile={onRemoveFile}
+            onClearFiles={onClearFiles}
             onReset={onReset}
             disabled={disabled}
           />

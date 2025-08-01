@@ -537,7 +537,19 @@ export default function HomePage() {
     }
   }, [pickupCode, updateFileList]);
 
-  // 重置状态
+  // 清空文件列表但保持房间连接
+  const handleClearFiles = useCallback(() => {
+    setSelectedFiles([]);
+    setTransferProgresses([]);
+    setFileTransfers(new Map());
+    // 保持 pickupCode, pickupLink, roomStatus 和 websocket 连接
+    if (pickupCode) {
+      updateFileList([]);
+      showNotification('文件列表已清空，房间保持连接', 'success');
+    }
+  }, [pickupCode, updateFileList, showNotification]);
+
+  // 完全重置状态（关闭房间）
   const handleReset = useCallback(() => {
     setSelectedFiles([]);
     setPickupCode('');
@@ -547,7 +559,8 @@ export default function HomePage() {
     setRoomStatus(null);
     setFileTransfers(new Map());
     disconnect();
-  }, [disconnect]);
+    showNotification('已断开连接', 'info');
+  }, [disconnect, showNotification]);
 
     // 复制到剪贴板
   const copyToClipboard = useCallback(async (text: string, successMessage: string) => {
@@ -628,6 +641,7 @@ export default function HomePage() {
                     input.click();
                   }}
                   onRemoveFile={handleRemoveFile}
+                  onClearFiles={handleClearFiles}
                   onReset={handleReset}
                   onJoinRoom={handleJoinRoom}
                   receiverFiles={receiverFiles}
@@ -668,14 +682,67 @@ export default function HomePage() {
               <TabsContent value="text" className="mt-6 animate-fade-in-up">
                 <TextTransfer
                   onSendText={async (text: string) => {
-                    // TODO: 实现文字传输功能
-                    showNotification('文字传输功能开发中', 'info');
-                    return 'ABC123'; // 模拟返回取件码
+                    try {
+                      const response = await fetch('/api/create-text-room', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ text }),
+                      });
+
+                      const data = await response.json();
+                      
+                      if (!response.ok) {
+                        const errorMessage = data.error || '创建文字传输房间失败';
+                        showNotification(errorMessage, 'error');
+                        return ''; // 返回空字符串而不是抛出错误
+                      }
+
+                      showNotification('文字传输房间创建成功！', 'success');
+                      return data.code;
+                    } catch (error) {
+                      console.error('创建文字传输房间失败:', error);
+                      showNotification('网络错误，请重试', 'error');
+                      return ''; // 返回空字符串而不是抛出错误
+                    }
                   }}
                   onReceiveText={async (code: string) => {
-                    // TODO: 实现文字接收功能
-                    showNotification('文字传输功能开发中', 'info');
-                    return '示例文本内容'; // 模拟返回文本
+                    try {
+                      const response = await fetch('/api/get-text-content', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ code }),
+                      });
+
+                      const data = await response.json();
+                      
+                      if (!response.ok) {
+                        const errorMessage = data.error || '获取文字内容失败';
+                        showNotification(errorMessage, 'error');
+                        return ''; // 返回空字符串而不是抛出错误
+                      }
+
+                      return data.text;
+                    } catch (error) {
+                      console.error('获取文字内容失败:', error);
+                      showNotification('网络错误，请重试', 'error');
+                      return ''; // 返回空字符串而不是抛出错误
+                    }
+                  }}
+                  websocket={websocket}
+                  isConnected={isConnected}
+                  currentRole={currentRole}
+                  onCreateWebSocket={(code: string, role: 'sender' | 'receiver') => {
+                    // 如果已有连接，先关闭
+                    if (websocket) {
+                      disconnect();
+                    }
+                    
+                    // 创建新的WebSocket连接
+                    connect(code, role);
                   }}
                 />
               </TabsContent>

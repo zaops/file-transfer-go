@@ -16,12 +16,14 @@ import (
 )
 
 type FileTransferRoom struct {
-	ID        string
-	Code      string                        // 取件码
-	Files     []models.FileTransferInfo     // 待传输文件信息
-	Clients   map[string]*models.ClientInfo // 所有连接的客户端 (客户端ID -> ClientInfo)
-	CreatedAt time.Time                     // 创建时间
-	mutex     sync.RWMutex
+	ID          string
+	Code        string                        // 取件码
+	Files       []models.FileTransferInfo     // 待传输文件信息
+	Clients     map[string]*models.ClientInfo // 所有连接的客户端 (客户端ID -> ClientInfo)
+	CreatedAt   time.Time                     // 创建时间
+	TextContent string                        // 文字内容
+	IsTextRoom  bool                          // 是否是文字传输房间
+	mutex       sync.RWMutex
 }
 
 type P2PService struct {
@@ -75,6 +77,42 @@ func (p *P2PService) GetRoomByCode(code string) (*FileTransferRoom, bool) {
 
 	room, exists := p.rooms[code]
 	return room, exists
+}
+
+// CreateTextRoom 创建文字传输房间并返回取件码
+func (p *P2PService) CreateTextRoom(text string) string {
+	code := generatePickupCode()
+
+	p.roomsMux.Lock()
+	defer p.roomsMux.Unlock()
+
+	room := &FileTransferRoom{
+		ID:          "text_room_" + code,
+		Code:        code,
+		Files:       []models.FileTransferInfo{}, // 文字房间不需要文件
+		Clients:     make(map[string]*models.ClientInfo),
+		CreatedAt:   time.Now(),
+		TextContent: text,
+		IsTextRoom:  true,
+	}
+
+	p.rooms[code] = room
+	log.Printf("创建文字传输房间，取件码: %s，文字长度: %d", code, len(text))
+
+	return code
+}
+
+// GetTextContent 根据取件码获取文字内容
+func (p *P2PService) GetTextContent(code string) (string, bool) {
+	p.roomsMux.RLock()
+	defer p.roomsMux.RUnlock()
+
+	room, exists := p.rooms[code]
+	if !exists || !room.IsTextRoom {
+		return "", false
+	}
+
+	return room.TextContent, true
 }
 
 // generateClientID 生成客户端唯一标识
@@ -202,6 +240,15 @@ func (p *P2PService) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		case "file-info", "file-chunk", "file-complete":
 			// 处理文件传输相关消息，直接转发给接收方
 			p.forwardMessage(room, clientID, msg)
+		case "text-update":
+			// 处理实时文字更新
+			p.handleTextUpdate(room, clientID, msg)
+		case "text-send":
+			// 处理文字发送
+			p.handleTextSend(room, clientID, msg)
+		case "image-send":
+			// 处理图片发送
+			p.handleImageSend(room, clientID, msg)
 		default:
 			// 转发消息到对应的客户端
 			p.forwardMessage(room, clientID, msg)
@@ -538,4 +585,51 @@ func (p *P2PService) UpdateRoomFiles(code string, files []models.FileTransferInf
 	room.mutex.RUnlock()
 
 	return true
+}
+
+// handleTextUpdate 处理实时文字更新
+func (p *P2PService) handleTextUpdate(room *FileTransferRoom, senderID string, msg models.VideoMessage) {
+	log.Printf("处理文字更新: 来自客户端 %s", senderID)
+
+	// 转发文字更新给房间内其他所有客户端
+	room.mutex.RLock()
+	defer room.mutex.RUnlock()
+
+	for clientID, client := range room.Clients {
+		if clientID != senderID { // 不发送给发送者自己
+			if err := client.Connection.WriteJSON(msg); err != nil {
+				log.Printf("转发文字更新失败 %s: %v", clientID, err)
+			}
+		}
+	}
+}
+
+// handleTextSend 处理文字发送
+func (p *P2PService) handleTextSend(room *FileTransferRoom, senderID string, msg models.VideoMessage) {
+	log.Printf("处理文字发送: 来自客户端 %s", senderID)
+
+	// 转发文字发送给房间内所有客户端
+	room.mutex.RLock()
+	defer room.mutex.RUnlock()
+
+	for _, client := range room.Clients {
+		if err := client.Connection.WriteJSON(msg); err != nil {
+			log.Printf("转发文字发送失败 %s: %v", client.ID, err)
+		}
+	}
+}
+
+// handleImageSend 处理图片发送
+func (p *P2PService) handleImageSend(room *FileTransferRoom, senderID string, msg models.VideoMessage) {
+	log.Printf("处理图片发送: 来自客户端 %s", senderID)
+
+	// 转发图片发送给房间内所有客户端
+	room.mutex.RLock()
+	defer room.mutex.RUnlock()
+
+	for _, client := range room.Clients {
+		if err := client.Connection.WriteJSON(msg); err != nil {
+			log.Printf("转发图片发送失败 %s: %v", client.ID, err)
+		}
+	}
 }
