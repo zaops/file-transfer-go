@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { UseWebSocketReturn, WebSocketMessage } from '@/types';
+import { getWebSocketUrl } from '@/lib/api-utils';
 
 export function useWebSocket(): UseWebSocketReturn {
   const [websocket, setWebsocket] = useState<WebSocket | null>(null);
@@ -24,10 +25,9 @@ export function useWebSocket(): UseWebSocketReturn {
     currentCodeRef.current = code;
     currentRoleRef.current = role;
 
-    // 连接到Go后端的WebSocket
-    const wsUrl = process.env.NODE_ENV === 'production' 
-      ? `wss://${window.location.host}/ws/p2p?code=${code}&role=${role}`
-      : `ws://localhost:8080/ws/p2p?code=${code}&role=${role}`;
+    // 连接到Go后端的WebSocket - 使用配置文件中的URL
+    const baseWsUrl = getWebSocketUrl();
+    const wsUrl = `${baseWsUrl}/p2p?code=${code}&role=${role}`;
     
     console.log('连接WebSocket:', wsUrl);
     

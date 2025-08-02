@@ -1,0 +1,3 @@
+# Static Files Directory
+
+This directory contains static files that will be embedded into the Go binary.

@@ -11,6 +11,7 @@ import (
 
 	"chuan/internal/handlers"
 	"chuan/internal/services"
+	"chuan/internal/web"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -46,8 +47,11 @@ func main() {
 	// fileServer := http.FileServer(http.Dir("./web/static/"))
 	// r.Handle("/static/*", http.StripPrefix("/static", fileServer))
 
+	// 嵌入式前端文件服务
+	r.Handle("/*", web.CreateFrontendHandler())
+
 	// 路由定义
-	r.Get("/", h.IndexHandler)
+	r.Get("/api", h.IndexHandler) // API 状态页面
 	r.Get("/ws/p2p", h.HandleP2PWebSocket)
 
 	// API路由

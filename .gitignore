@@ -107,3 +107,5 @@ backup/
 # Next.js相关
 .next/
 ./chuan/.next
+./internal/web/frontend/*
+./file-transfer-server

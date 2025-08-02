@@ -13,6 +13,7 @@ import { useWebSocket } from '@/hooks/useWebSocket';
 import { FileInfo, TransferProgress, WebSocketMessage, RoomStatus } from '@/types';
 import { Upload, MessageSquare, Monitor } from 'lucide-react';
 import { useToast } from '@/components/ui/toast-simple';
+import { apiPost, apiGet, debugApiConfig } from '@/lib/api-utils';
 
 interface FileTransferData {
   fileId: string;
@@ -97,6 +98,14 @@ export default function HomePage() {
     setActiveTab(value as 'file' | 'text' | 'desktop');
     updateUrlParams(value);
   }, [updateUrlParams, isConnected, pickupCode, isConnecting, activeTab]);
+
+  // 监听WebSocket连接状态变化，重置连接中状态
+  useEffect(() => {
+    if (isConnected && isConnecting) {
+      setIsConnecting(false);
+      console.log('WebSocket连接已建立，重置连接状态');
+    }
+  }, [isConnected, isConnecting]);
 
   // 确认切换tab
   const confirmTabSwitch = useCallback(() => {
@@ -430,11 +439,7 @@ export default function HomePage() {
     }));
     
     try {
-      const response = await fetch('/api/create-room', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ files: fileInfos })
-      });
+      const response = await apiPost('/api/create-room', { files: fileInfos });
       
       const data = await response.json();
       if (data.success) {
@@ -468,21 +473,23 @@ export default function HomePage() {
     setIsConnecting(true);
     
     try {
-      const response = await fetch(`/api/room-info?code=${code}`);
+      const response = await apiGet(`/api/room-info?code=${code}`);
       const data = await response.json();
       
       if (data.success) {
         setPickupCode(code);
         setCurrentRole('receiver');
         setReceiverFiles(data.files || []);
+        // 开始连接WebSocket
         connect(code, 'receiver');
         showNotification('连接成功！', 'success');
+        // 注意：isConnecting状态会在WebSocket连接建立后自动重置
       } else {
         showNotification(data.message || '取件码无效或已过期', 'error');
         setIsConnecting(false);
       }
     } catch (error) {
-      console.error('连接失败:', error);
+      console.error('API调用失败:', error);
       showNotification('连接失败，请检查网络连接', 'error');
       setIsConnecting(false);
     }
