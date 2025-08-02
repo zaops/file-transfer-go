@@ -3,7 +3,7 @@
  * 统一处理开发模式和静态模式下的API调用
  */
 
-import { config, getApiUrl, getDirectBackendUrl } from './config';
+import { config, getApiUrl, getDirectBackendUrl, getWsUrl } from './config';
 
 /**
  * 统一的 fetch 函数，自动处理不同环境下的API调用
@@ -120,7 +120,7 @@ export async function apiUpload(
  * 获取 WebSocket URL
  */
 export function getWebSocketUrl(): string {
-  return config.api.wsUrl;
+  return getWsUrl(); // 使用实时获取的 WebSocket URL
 }
 
 /**

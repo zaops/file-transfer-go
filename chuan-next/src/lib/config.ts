@@ -14,6 +14,26 @@ const getEnv = (key: string, defaultValue: string = '') => {
   return defaultValue;
 };
 
+// 动态获取当前域名和协议
+const getCurrentBaseUrl = () => {
+  if (typeof window !== 'undefined') {
+    // 客户端运行时，使用当前页面的 origin
+    return window.location.origin;
+  }
+  // 服务器端默认值
+  return 'http://localhost:8080';
+};
+
+// 动态获取 WebSocket URL
+const getCurrentWsUrl = () => {
+  if (typeof window !== 'undefined') {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${window.location.host}/ws`;
+  }
+  // 服务器端默认值
+  return 'ws://localhost:8080/ws';
+};
+
 export const config = {
   // 环境判断
   isDev: getEnv('NODE_ENV') === 'development',
@@ -28,11 +48,11 @@ export const config = {
     // 前端API基础URL (客户端使用) - 开发模式下调用 Next.js API 路由
     baseUrl: getEnv('NEXT_PUBLIC_API_BASE_URL', 'http://localhost:3000'),
     
-    // 直接后端URL (客户端在静态模式下使用)
-    directBackendUrl: getEnv('NEXT_PUBLIC_BACKEND_URL', 'http://localhost:8080'),
+    // 直接后端URL (客户端在静态模式下使用) - 如果环境变量为空，则使用当前域名
+    directBackendUrl: getEnv('NEXT_PUBLIC_BACKEND_URL') || getCurrentBaseUrl(),
     
-    // WebSocket地址
-    wsUrl: getEnv('NEXT_PUBLIC_WS_URL', 'ws://localhost:8080/ws'),
+    // WebSocket地址 - 如果环境变量为空，则使用当前域名构建
+    wsUrl: getEnv('NEXT_PUBLIC_WS_URL') || getCurrentWsUrl(),
   },
   
   // 超时配置
@@ -76,7 +96,8 @@ export function getApiUrl(path: string): string {
  * @returns 完整的API URL
  */
 export function getDirectBackendUrl(path: string): string {
-  const baseUrl = config.api.directBackendUrl.replace(/\/$/, '')
+  // 实时获取当前域名（支持动态域名）
+  const baseUrl = (getEnv('NEXT_PUBLIC_BACKEND_URL') || getCurrentBaseUrl()).replace(/\/$/, '')
   const apiPath = path.startsWith('/') ? path : `/${path}`
   return `${baseUrl}${apiPath}`
 }
@@ -86,7 +107,8 @@ export function getDirectBackendUrl(path: string): string {
  * @returns WebSocket连接地址
  */
 export function getWsUrl(): string {
-  return config.api.wsUrl
+  // 实时获取当前域名构建的 WebSocket URL
+  return getEnv('NEXT_PUBLIC_WS_URL') || getCurrentWsUrl()
 }
 
 /**
@@ -97,8 +119,9 @@ export function getEnvInfo() {
     environment: getEnv('NODE_ENV'),
     backendUrl: config.api.backendUrl,
     baseUrl: config.api.baseUrl,
-    directBackendUrl: config.api.directBackendUrl,
-    wsUrl: config.api.wsUrl,
+    directBackendUrl: getDirectBackendUrl(''), // 实时获取
+    wsUrl: getWsUrl(), // 实时获取
+    currentOrigin: typeof window !== 'undefined' ? window.location.origin : 'server-side',
     isDev: config.isDev,
     isProd: config.isProd,
     isStatic: config.isStatic,
