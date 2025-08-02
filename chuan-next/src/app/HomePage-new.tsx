@@ -485,20 +485,36 @@ export default function HomePage() {
         showNotification('连接成功！', 'success');
         // 注意：isConnecting状态会在WebSocket连接建立后自动重置
       } else {
-        showNotification(data.message || '取件码无效或已过期', 'error');
+        showNotification(data.message || '取件码不存在或已过期', 'error');
         setIsConnecting(false);
       }
     } catch (error) {
       console.error('API调用失败:', error);
-      showNotification('连接失败，请检查网络连接', 'error');
+      showNotification('取件码不存在或已过期', 'error');
       setIsConnecting(false);
     }
   }, [connect, showNotification, isConnecting, isConnected, pickupCode]);
 
-  // 处理URL参数中的取件码
+  // 处理URL参数中的取件码（仅在首次加载时）
   useEffect(() => {
     const code = searchParams.get('code');
-    if (code && code.length === 6 && !isConnected && pickupCode !== code.toUpperCase()) {
+    const type = searchParams.get('type');
+    const mode = searchParams.get('mode');
+    
+    // 只有在完整的URL参数情况下才自动加入房间：
+    // 1. 有效的6位取件码
+    // 2. 当前未连接
+    // 3. 不是已经连接的同一个房间码
+    // 4. 必须是完整的链接：有type、mode=receive和code参数
+    // 5. 不是文字类型（文字类型由TextTransfer组件处理）
+    if (code && 
+        code.length === 6 && 
+        !isConnected && 
+        pickupCode !== code.toUpperCase() &&
+        type &&
+        type !== 'text' &&
+        mode === 'receive') {
+      console.log('自动加入文件房间:', code.toUpperCase());
       setCurrentRole('receiver');
       handleJoinRoom(code.toUpperCase());
     }
@@ -743,7 +759,8 @@ export default function HomePage() {
                         return ''; // 返回空字符串而不是抛出错误
                       }
 
-                      showNotification('文字传输房间创建成功！', 'success');
+                      // 注释掉这里的成功提示，让 TextTransfer 组件来处理
+                      // showNotification('文字传输房间创建成功！', 'success');
                       return data.code;
                     } catch (error) {
                       console.error('创建文字传输房间失败:', error);

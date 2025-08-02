@@ -662,13 +662,15 @@ func (p *P2PService) handleTextSend(room *FileTransferRoom, senderID string, msg
 func (p *P2PService) handleImageSend(room *FileTransferRoom, senderID string, msg models.VideoMessage) {
 	log.Printf("处理图片发送: 来自客户端 %s", senderID)
 
-	// 转发图片发送给房间内所有客户端
+	// 转发图片发送给房间内其他客户端（不包括发送者）
 	room.mutex.RLock()
 	defer room.mutex.RUnlock()
 
-	for _, client := range room.Clients {
-		if err := client.Connection.WriteJSON(msg); err != nil {
-			log.Printf("转发图片发送失败 %s: %v", client.ID, err)
+	for clientID, client := range room.Clients {
+		if clientID != senderID { // 不发送给发送者自己
+			if err := client.Connection.WriteJSON(msg); err != nil {
+				log.Printf("转发图片发送失败 %s: %v", clientID, err)
+			}
 		}
 	}
 }

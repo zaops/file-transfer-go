@@ -4,7 +4,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { MessageSquare, Copy, Send, Download, Image, Users, Link } from 'lucide-react';
+import { MessageSquare, Copy, Send, Download, Image, Users, Link, Eye } from 'lucide-react';
 import { useToast } from '@/components/ui/toast-simple';
 
 interface TextTransferProps {
@@ -36,75 +36,29 @@ export default function TextTransfer({
   const [isRoomCreated, setIsRoomCreated] = useState(false);
   const [connectedUsers, setConnectedUsers] = useState(0);
   const [images, setImages] = useState<string[]>([]);
-  const [hasAutoJoined, setHasAutoJoined] = useState(false); // 防止重复自动加入
+  const [imagePreview, setImagePreview] = useState<string | null>(null); // 图片预览状态
+  const [previewImage, setPreviewImage] = useState<string | null>(null); // 图片预览弹窗状态
   const [hasShownJoinSuccess, setHasShownJoinSuccess] = useState(false); // 防止重复显示加入成功消息
   const { showToast } = useToast();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const connectionTimeoutRef = useRef<NodeJS.Timeout | null>(null); // 连接超时定时器
 
-  // 处理通过URL参数自动加入房间
-  const handleJoinRoomWithCode = useCallback(async (code: string) => {
-    if (!code || code.length !== 6) return;
-
-    setIsLoading(true);
-    try {
-      // 先查询房间信息，确认房间存在
-      const roomInfoResponse = await fetch(`/api/room-info?code=${code}`);
-      const roomData = await roomInfoResponse.json();
-      
-      if (!roomInfoResponse.ok || !roomData.success) {
-        showToast(roomData.message || '房间不存在或已过期', 'error');
-        setIsLoading(false);
-        return;
-      }
-
-      // 房间存在，创建WebSocket连接
-      if (onCreateWebSocket) {
-        console.log('房间验证成功，自动加入房间:', code);
-        onCreateWebSocket(code, 'receiver');
-        
-        // 设置连接超时，如果5秒内没有收到消息就认为连接失败
-        connectionTimeoutRef.current = setTimeout(() => {
-          if (isLoading) {
-            setIsLoading(false);
-            showToast('连接超时，请重试', 'error');
-          }
-        }, 5000);
-      }
-    } catch (error) {
-      console.error('自动加入房间失败:', error);
-      showToast('网络错误，请稍后重试', 'error');
-      setIsLoading(false);
-    }
-  }, [onCreateWebSocket, showToast]);
-
-  // 从URL参数中获取初始模式和房间码
+  // 从URL参数中获取初始模式
   useEffect(() => {
     const urlMode = searchParams.get('mode') as 'send' | 'receive';
     const type = searchParams.get('type');
-    const urlCode = searchParams.get('code');
     
     if (type === 'text' && urlMode && ['send', 'receive'].includes(urlMode)) {
       setMode(urlMode);
       
-      // 如果URL中有房间码且是接收模式，自动填入房间码并尝试加入（只执行一次）
-      if (urlMode === 'receive' && urlCode && urlCode.length === 6 && !hasAutoJoined) {
+      // 如果是接收模式且URL中有房间码，只填入房间码，不自动连接
+      const urlCode = searchParams.get('code');
+      if (urlMode === 'receive' && urlCode && urlCode.length === 6) {
         setRoomCode(urlCode.toUpperCase());
-        setHasAutoJoined(true); // 标记已自动加入，防止重复
-        
-        // 自动尝试加入房间
-        setTimeout(() => {
-          if (onCreateWebSocket) {
-            console.log('自动加入房间:', urlCode.toUpperCase());
-            setIsLoading(true);
-            onCreateWebSocket(urlCode.toUpperCase(), 'receiver');
-            // 这里不设置setIsLoading(false)，因为会在WebSocket消息中处理
-          }
-        }, 500); // 延迟500ms确保组件完全初始化
       }
     }
-  }, [searchParams, onCreateWebSocket, hasAutoJoined]);
+  }, [searchParams]);
 
   // 监听WebSocket消息和连接事件
   useEffect(() => {
@@ -119,8 +73,8 @@ export default function TextTransfer({
             setReceivedText(message.payload.text);
             if (currentRole === 'receiver') {
               setTextContent(message.payload.text);
-              // 只在第一次收到文字内容时显示成功消息
-              if (!hasShownJoinSuccess) {
+              // 只在第一次收到文字内容且处于loading状态时显示成功消息
+              if (!hasShownJoinSuccess && isLoading) {
                 setHasShownJoinSuccess(true);
                 showToast('成功加入文字房间！', 'success');
               }
@@ -130,7 +84,7 @@ export default function TextTransfer({
               clearTimeout(connectionTimeoutRef.current);
               connectionTimeoutRef.current = null;
             }
-            // 如果是自动加入触发的，结束loading状态
+            // 结束loading状态
             if (isLoading) {
               setIsLoading(false);
             }
@@ -180,7 +134,7 @@ export default function TextTransfer({
       if (isLoading) {
         setIsLoading(false);
         if (code !== 1000) { // 不是正常关闭
-          showToast('连接失败，请检查房间码或网络', 'error');
+          showToast('取件码不存在或已过期', 'error');
         }
       }
     };
@@ -191,7 +145,7 @@ export default function TextTransfer({
       // 如果是在loading状态下出现错误，结束loading并显示错误
       if (isLoading) {
         setIsLoading(false);
-        showToast('连接失败，请稍后重试', 'error');
+        showToast('取件码不存在或已过期', 'error');
       }
     };
 
@@ -222,7 +176,7 @@ export default function TextTransfer({
 
   // 发送实时文字更新
   const sendTextUpdate = useCallback((text: string) => {
-    if (!websocket || !isConnected || !isRoomCreated) return;
+    if (!websocket || !isConnected) return;
 
     // 清除之前的定时器
     if (updateTimeoutRef.current) {
@@ -236,18 +190,18 @@ export default function TextTransfer({
         payload: { text }
       }));
     }, 300); // 300ms防抖
-  }, [websocket, isConnected, isRoomCreated]);
+  }, [websocket, isConnected]);
 
   // 处理文字输入
   const handleTextChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newText = e.target.value;
     setTextContent(newText);
     
-    // 如果是发送方且房间已创建，发送实时更新
-    if (currentRole === 'sender' && isRoomCreated) {
+    // 如果有WebSocket连接，发送实时更新
+    if (isConnected && websocket) {
       sendTextUpdate(newText);
     }
-  }, [currentRole, isRoomCreated, sendTextUpdate]);
+  }, [isConnected, websocket, sendTextUpdate]);
 
   // 创建文字传输房间
   const handleCreateRoom = useCallback(async () => {
@@ -310,13 +264,13 @@ export default function TextTransfer({
         console.log('房间验证成功，手动加入房间:', roomCode);
         onCreateWebSocket(roomCode, 'receiver');
         
-        // 设置连接超时，如果5秒内没有收到消息就认为连接失败
+        // 设置连接超时，如果8秒内没有收到消息就认为连接失败
         connectionTimeoutRef.current = setTimeout(() => {
           if (isLoading) {
             setIsLoading(false);
-            showToast('连接超时，请重试', 'error');
+            showToast('取件码不存在或已过期', 'error');
           }
-        }, 5000);
+        }, 8000);
       }
     } catch (error) {
       console.error('加入房间失败:', error);
@@ -337,8 +291,74 @@ export default function TextTransfer({
     showToast('文字已发送！', 'success');
   }, [websocket, isConnected, textContent, showToast]);
 
+  // 压缩图片
+  const compressImage = useCallback((file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const img = document.createElement('img');
+      
+      if (!ctx) {
+        reject(new Error('无法创建Canvas上下文'));
+        return;
+      }
+      
+      img.onload = () => {
+        try {
+          // 设置最大尺寸
+          const maxWidth = 800;
+          const maxHeight = 600;
+          let { width, height } = img;
+          
+          // 计算压缩比例
+          if (width > height) {
+            if (width > maxWidth) {
+              height = (height * maxWidth) / width;
+              width = maxWidth;
+            }
+          } else {
+            if (height > maxHeight) {
+              width = (width * maxHeight) / height;
+              height = maxHeight;
+            }
+          }
+          
+          canvas.width = width;
+          canvas.height = height;
+          
+          // 设置白色背景，防止透明图片变成黑色
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(0, 0, width, height);
+          
+          // 绘制压缩后的图片
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          // 转为base64，质量为0.8
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+          resolve(compressedDataUrl);
+        } catch (error) {
+          reject(new Error('图片压缩失败: ' + error));
+        }
+      };
+      
+      img.onerror = () => reject(new Error('图片加载失败'));
+      
+      // 读取文件
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        if (e.target?.result) {
+          img.src = e.target.result as string;
+        } else {
+          reject(new Error('文件读取失败'));
+        }
+      };
+      reader.onerror = () => reject(new Error('文件读取失败'));
+      reader.readAsDataURL(file);
+    });
+  }, []);
+
   // 处理图片粘贴
-  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+  const handlePaste = useCallback(async (e: React.ClipboardEvent) => {
     const items = e.clipboardData?.items;
     if (!items) return;
 
@@ -347,25 +367,27 @@ export default function TextTransfer({
       if (item.type.indexOf('image') !== -1) {
         const file = item.getAsFile();
         if (file) {
-          const reader = new FileReader();
-          reader.onload = (event) => {
-            const imageData = event.target?.result as string;
-            setImages(prev => [...prev, imageData]);
+          try {
+            showToast('正在处理图片...', 'info');
+            const compressedImageData = await compressImage(file);
+            setImages(prev => [...prev, compressedImageData]);
             
             // 发送图片给其他用户
             if (websocket && isConnected) {
               websocket.send(JSON.stringify({
                 type: 'image-send',
-                payload: { imageData }
+                payload: { imageData: compressedImageData }
               }));
               showToast('图片已发送！', 'success');
             }
-          };
-          reader.readAsDataURL(file);
+          } catch (error) {
+            console.error('图片处理失败:', error);
+            showToast('图片处理失败，请重试', 'error');
+          }
         }
       }
     }
-  }, [websocket, isConnected, showToast]);
+  }, [websocket, isConnected, showToast, compressImage]);
 
   const copyToClipboard = useCallback(async (text: string) => {
     try {
@@ -382,6 +404,75 @@ export default function TextTransfer({
     const transferLink = `${currentUrl}?type=text&mode=receive&code=${code}`;
     await copyToClipboard(transferLink);
   }, [copyToClipboard]);
+
+  // 下载图片
+  const downloadImage = useCallback((imageData: string, index: number) => {
+    const link = document.createElement('a');
+    link.download = `image_${index + 1}.jpg`;
+    link.href = imageData;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast('图片已下载！', 'success');
+  }, [showToast]);
+
+  // 图片预览组件
+  const ImagePreviewModal = ({ src, onClose }: { src: string; onClose: () => void }) => (
+    <div 
+      className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in"
+      onClick={onClose}
+    >
+      <div className="relative max-w-[90vw] max-h-[90vh] animate-scale-in">
+        <div className="relative bg-white rounded-2xl overflow-hidden shadow-2xl">
+          <img 
+            src={src} 
+            alt="预览" 
+            className="max-w-full max-h-[80vh] object-contain block bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50"
+            onClick={(e) => e.stopPropagation()}
+            onError={(e) => {
+              console.error('预览图片加载失败:', src);
+            }}
+          />
+          
+          {/* 操作按钮栏 */}
+          <div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-slate-900/60 to-transparent p-4">
+            <div className="flex justify-between items-center">
+              <h3 className="text-white font-medium text-lg">图片预览</h3>
+              <div className="flex gap-2">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const index = images.indexOf(src);
+                    downloadImage(src, index);
+                  }}
+                  className="bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white p-2 rounded-lg shadow-lg transition-all hover:scale-105"
+                  title="下载图片"
+                >
+                  <Download className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={onClose}
+                  className="bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white p-2 rounded-lg shadow-lg transition-all hover:scale-105"
+                  title="关闭预览"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          {/* 底部信息栏 */}
+          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-slate-900/60 to-transparent p-4">
+            <div className="text-white text-sm opacity-80">
+              点击空白区域关闭预览
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -537,14 +628,47 @@ export default function TextTransfer({
                 </h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {images.map((img, index) => (
-                    <div key={index} className="relative group">
+                    <div key={index} className="relative group overflow-hidden">
                       <img 
                         src={img} 
                         alt={`图片 ${index + 1}`}
-                        className="w-full h-24 object-cover rounded-lg border-2 border-slate-200 hover:border-blue-400 transition-colors cursor-pointer"
-                        onClick={() => window.open(img, '_blank')}
+                        className="w-full h-24 object-cover rounded-lg border-2 border-slate-200 hover:border-blue-400 transition-all duration-200 cursor-pointer bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50"
+                        onClick={() => setPreviewImage(img)}
+                        onError={(e) => {
+                          console.error('图片加载失败:', img);
+                          e.currentTarget.style.display = 'none';
+                        }}
                       />
                       <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-opacity rounded-lg"></div>
+                      
+                      {/* 悬浮按钮组 */}
+                      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPreviewImage(img);
+                          }}
+                          className="p-1.5 bg-white bg-opacity-90 hover:bg-opacity-100 rounded-md shadow-sm transition-all hover:scale-105"
+                          title="预览图片"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-slate-600" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            downloadImage(img, index);
+                          }}
+                          className="p-1.5 bg-white bg-opacity-90 hover:bg-opacity-100 rounded-md shadow-sm transition-all hover:scale-105"
+                          title="下载图片"
+                        >
+                          <Download className="w-3.5 h-3.5 text-slate-600" />
+                        </button>
+                      </div>
+                      
+                      {/* 图片序号 */}
+                      <div className="absolute bottom-1 left-1 bg-black bg-opacity-50 text-white text-xs px-1.5 py-0.5 rounded">
+                        {index + 1}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -655,14 +779,43 @@ export default function TextTransfer({
                 </h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {images.map((img, index) => (
-                    <div key={index} className="relative group">
+                    <div key={index} className="relative group overflow-hidden">
                       <img 
                         src={img} 
                         alt={`图片 ${index + 1}`}
-                        className="w-full h-24 object-cover rounded-lg border-2 border-slate-200 hover:border-emerald-400 transition-colors cursor-pointer"
-                        onClick={() => window.open(img, '_blank')}
+                        className="w-full h-24 object-cover rounded-lg border-2 border-slate-200 hover:border-emerald-400 transition-all duration-200 cursor-pointer bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50"
+                        onClick={() => setPreviewImage(img)}
                       />
                       <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-opacity rounded-lg"></div>
+                      
+                      {/* 悬浮按钮组 */}
+                      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPreviewImage(img);
+                          }}
+                          className="p-1.5 bg-white bg-opacity-90 hover:bg-opacity-100 rounded-md shadow-sm transition-all hover:scale-105"
+                          title="预览图片"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-slate-600" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            downloadImage(img, index);
+                          }}
+                          className="p-1.5 bg-white bg-opacity-90 hover:bg-opacity-100 rounded-md shadow-sm transition-all hover:scale-105"
+                          title="下载图片"
+                        >
+                          <Download className="w-3.5 h-3.5 text-slate-600" />
+                        </button>
+                      </div>
+                      
+                      {/* 图片序号 */}
+                      <div className="absolute bottom-1 left-1 bg-black bg-opacity-50 text-white text-xs px-1.5 py-0.5 rounded">
+                        {index + 1}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -670,6 +823,14 @@ export default function TextTransfer({
             )}
           </div>
         </div>
+      )}
+      
+      {/* 图片预览弹窗 */}
+      {previewImage && (
+        <ImagePreviewModal 
+          src={previewImage}
+          onClose={() => setPreviewImage(null)}
+        />
       )}
     </div>
   );
