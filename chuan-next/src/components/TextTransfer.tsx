@@ -36,9 +36,48 @@ export default function TextTransfer({
   const [isRoomCreated, setIsRoomCreated] = useState(false);
   const [connectedUsers, setConnectedUsers] = useState(0);
   const [images, setImages] = useState<string[]>([]);
+  const [hasAutoJoined, setHasAutoJoined] = useState(false); // 防止重复自动加入
+  const [hasShownJoinSuccess, setHasShownJoinSuccess] = useState(false); // 防止重复显示加入成功消息
   const { showToast } = useToast();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const connectionTimeoutRef = useRef<NodeJS.Timeout | null>(null); // 连接超时定时器
+
+  // 处理通过URL参数自动加入房间
+  const handleJoinRoomWithCode = useCallback(async (code: string) => {
+    if (!code || code.length !== 6) return;
+
+    setIsLoading(true);
+    try {
+      // 先查询房间信息，确认房间存在
+      const roomInfoResponse = await fetch(`/api/room-info?code=${code}`);
+      const roomData = await roomInfoResponse.json();
+      
+      if (!roomInfoResponse.ok || !roomData.success) {
+        showToast(roomData.message || '房间不存在或已过期', 'error');
+        setIsLoading(false);
+        return;
+      }
+
+      // 房间存在，创建WebSocket连接
+      if (onCreateWebSocket) {
+        console.log('房间验证成功，自动加入房间:', code);
+        onCreateWebSocket(code, 'receiver');
+        
+        // 设置连接超时，如果5秒内没有收到消息就认为连接失败
+        connectionTimeoutRef.current = setTimeout(() => {
+          if (isLoading) {
+            setIsLoading(false);
+            showToast('连接超时，请重试', 'error');
+          }
+        }, 5000);
+      }
+    } catch (error) {
+      console.error('自动加入房间失败:', error);
+      showToast('网络错误，请稍后重试', 'error');
+      setIsLoading(false);
+    }
+  }, [onCreateWebSocket, showToast]);
 
   // 从URL参数中获取初始模式和房间码
   useEffect(() => {
@@ -49,96 +88,128 @@ export default function TextTransfer({
     if (type === 'text' && urlMode && ['send', 'receive'].includes(urlMode)) {
       setMode(urlMode);
       
-      // 如果URL中有房间码且是接收模式，自动填入房间码
-      if (urlMode === 'receive' && urlCode && urlCode.length === 6) {
+      // 如果URL中有房间码且是接收模式，自动填入房间码并尝试加入（只执行一次）
+      if (urlMode === 'receive' && urlCode && urlCode.length === 6 && !hasAutoJoined) {
         setRoomCode(urlCode.toUpperCase());
+        setHasAutoJoined(true); // 标记已自动加入，防止重复
+        
         // 自动尝试加入房间
         setTimeout(() => {
-          if (onReceiveText) {
-            handleJoinRoomWithCode(urlCode.toUpperCase());
+          if (onCreateWebSocket) {
+            console.log('自动加入房间:', urlCode.toUpperCase());
+            setIsLoading(true);
+            onCreateWebSocket(urlCode.toUpperCase(), 'receiver');
+            // 这里不设置setIsLoading(false)，因为会在WebSocket消息中处理
           }
         }, 500); // 延迟500ms确保组件完全初始化
       }
     }
-  }, [searchParams]);
+  }, [searchParams, onCreateWebSocket, hasAutoJoined]);
 
-  // 处理通过URL参数自动加入房间
-  const handleJoinRoomWithCode = useCallback(async (code: string) => {
-    if (!code || code.length !== 6) return;
-
-    setIsLoading(true);
-    try {
-      if (onReceiveText) {
-        const text = await onReceiveText(code);
-        if (text) {
-          setReceivedText(text);
-          showToast('自动加入房间成功！', 'success');
-          
-          // 创建WebSocket连接用于实时同步
-          if (onCreateWebSocket) {
-            onCreateWebSocket(code, 'receiver');
-          }
-        }
-      }
-    } catch (error) {
-      console.error('自动加入房间失败:', error);
-      // 错误信息已经在HomePage中处理了
-    } finally {
-      setIsLoading(false);
-    }
-  }, [onReceiveText, onCreateWebSocket, showToast]);
-
-  // 监听WebSocket消息
+  // 监听WebSocket消息和连接事件
   useEffect(() => {
-    if (!websocket) return;
+    const handleWebSocketMessage = (event: CustomEvent) => {
+      const message = event.detail;
+      console.log('TextTransfer收到WebSocket消息:', message);
 
-    const handleMessage = (event: MessageEvent) => {
-      try {
-        const message = JSON.parse(event.data);
-        console.log('TextTransfer收到消息:', message);
-
-        switch (message.type) {
-          case 'text-update':
-            // 实时更新文字内容
-            if (message.payload?.text !== undefined) {
-              setReceivedText(message.payload.text);
-              if (currentRole === 'receiver') {
-                setTextContent(message.payload.text);
+      switch (message.type) {
+        case 'text-content':
+          // 接收到文字房间的初始内容或同步内容
+          if (message.payload?.text !== undefined) {
+            setReceivedText(message.payload.text);
+            if (currentRole === 'receiver') {
+              setTextContent(message.payload.text);
+              // 只在第一次收到文字内容时显示成功消息
+              if (!hasShownJoinSuccess) {
+                setHasShownJoinSuccess(true);
+                showToast('成功加入文字房间！', 'success');
               }
             }
-            break;
-          
-          case 'text-send':
-            // 接收到发送的文字
-            if (message.payload?.text) {
-              setReceivedText(message.payload.text);
-              showToast('收到新的文字内容！', 'success');
+            // 清除连接超时定时器
+            if (connectionTimeoutRef.current) {
+              clearTimeout(connectionTimeoutRef.current);
+              connectionTimeoutRef.current = null;
             }
-            break;
-          
-          case 'image-send':
-            // 接收到发送的图片
-            if (message.payload?.imageData) {
-              setImages(prev => [...prev, message.payload.imageData]);
-              showToast('收到新的图片！', 'success');
+            // 如果是自动加入触发的，结束loading状态
+            if (isLoading) {
+              setIsLoading(false);
             }
-            break;
-          
-          case 'room-status':
-            // 更新房间状态
-            if (message.payload?.sender_count !== undefined && message.payload?.receiver_count !== undefined) {
-              setConnectedUsers(message.payload.sender_count + message.payload.receiver_count);
+          }
+          break;
+
+        case 'text-update':
+          // 实时更新文字内容
+          if (message.payload?.text !== undefined) {
+            setReceivedText(message.payload.text);
+            if (currentRole === 'receiver') {
+              setTextContent(message.payload.text);
             }
-            break;
-        }
-      } catch (error) {
-        console.error('解析WebSocket消息失败:', error);
+          }
+          break;
+        
+        case 'text-send':
+          // 接收到发送的文字
+          if (message.payload?.text) {
+            setReceivedText(message.payload.text);
+            showToast('收到新的文字内容！', 'success');
+          }
+          break;
+        
+        case 'image-send':
+          // 接收到发送的图片
+          if (message.payload?.imageData) {
+            setImages(prev => [...prev, message.payload.imageData]);
+            showToast('收到新的图片！', 'success');
+          }
+          break;
+        
+        case 'room-status':
+          // 更新房间状态
+          if (message.payload?.sender_count !== undefined && message.payload?.receiver_count !== undefined) {
+            setConnectedUsers(message.payload.sender_count + message.payload.receiver_count);
+          }
+          break;
       }
     };
 
-    websocket.addEventListener('message', handleMessage);
-    return () => websocket.removeEventListener('message', handleMessage);
-  }, [websocket, currentRole, showToast]);
+    const handleWebSocketClose = (event: CustomEvent) => {
+      const { code, reason } = event.detail;
+      console.log('WebSocket连接关闭:', code, reason);
+      
+      // 如果是在loading状态下连接关闭，说明连接失败
+      if (isLoading) {
+        setIsLoading(false);
+        if (code !== 1000) { // 不是正常关闭
+          showToast('连接失败，请检查房间码或网络', 'error');
+        }
+      }
+    };
+
+    const handleWebSocketError = (event: CustomEvent) => {
+      console.error('WebSocket连接错误:', event.detail);
+      
+      // 如果是在loading状态下出现错误，结束loading并显示错误
+      if (isLoading) {
+        setIsLoading(false);
+        showToast('连接失败，请稍后重试', 'error');
+      }
+    };
+
+    window.addEventListener('websocket-message', handleWebSocketMessage as EventListener);
+    window.addEventListener('websocket-close', handleWebSocketClose as EventListener);
+    window.addEventListener('websocket-error', handleWebSocketError as EventListener);
+    
+    return () => {
+      window.removeEventListener('websocket-message', handleWebSocketMessage as EventListener);
+      window.removeEventListener('websocket-close', handleWebSocketClose as EventListener);
+      window.removeEventListener('websocket-error', handleWebSocketError as EventListener);
+      
+      // 清理定时器
+      if (connectionTimeoutRef.current) {
+        clearTimeout(connectionTimeoutRef.current);
+      }
+    };
+  }, [currentRole, showToast, hasShownJoinSuccess, isLoading]);
 
   // 更新URL参数
   const updateMode = useCallback((newMode: 'send' | 'receive') => {
@@ -215,27 +286,44 @@ export default function TextTransfer({
       return;
     }
 
+    // 防止重复加入
+    if (isLoading) {
+      return;
+    }
+
     setIsLoading(true);
+    setHasShownJoinSuccess(false); // 重置加入成功消息标志
+    
     try {
-      if (onReceiveText) {
-        const text = await onReceiveText(roomCode);
-        if (text) { // 只有在成功获取到文字时才设置状态和显示成功消息
-          setReceivedText(text);
-          showToast('成功加入房间！', 'success');
-          
-          // 创建WebSocket连接用于实时同步
-          if (onCreateWebSocket) {
-            onCreateWebSocket(roomCode, 'receiver');
+      // 先查询房间信息，确认房间存在
+      const roomInfoResponse = await fetch(`/api/room-info?code=${roomCode}`);
+      const roomData = await roomInfoResponse.json();
+      
+      if (!roomInfoResponse.ok || !roomData.success) {
+        showToast(roomData.message || '房间不存在或已过期', 'error');
+        setIsLoading(false);
+        return;
+      }
+
+      // 房间存在，创建WebSocket连接
+      if (onCreateWebSocket) {
+        console.log('房间验证成功，手动加入房间:', roomCode);
+        onCreateWebSocket(roomCode, 'receiver');
+        
+        // 设置连接超时，如果5秒内没有收到消息就认为连接失败
+        connectionTimeoutRef.current = setTimeout(() => {
+          if (isLoading) {
+            setIsLoading(false);
+            showToast('连接超时，请重试', 'error');
           }
-        }
+        }, 5000);
       }
     } catch (error) {
       console.error('加入房间失败:', error);
-      // 错误信息已经在HomePage中处理了，这里不再重复显示
-    } finally {
+      showToast('网络错误，请稍后重试', 'error');
       setIsLoading(false);
     }
-  }, [roomCode, onReceiveText, onCreateWebSocket, showToast]);
+  }, [roomCode, onCreateWebSocket, showToast, isLoading]);
 
   // 发送文字
   const handleSendText = useCallback(() => {
@@ -314,7 +402,7 @@ export default function TextTransfer({
             className="px-6 py-2 rounded-lg"
           >
             <Download className="w-4 h-4 mr-2" />
-            接收文字
+            加入房间
           </Button>
         </div>
       </div>
@@ -470,7 +558,7 @@ export default function TextTransfer({
             <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-4 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-2xl flex items-center justify-center animate-float">
               <Download className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
             </div>
-            <h2 className="text-xl sm:text-2xl font-semibold text-slate-800 mb-2">接收文字</h2>
+            <h2 className="text-xl sm:text-2xl font-semibold text-slate-800 mb-2">加入房间</h2>
             <p className="text-sm sm:text-base text-slate-600">输入6位房间码来获取文字内容</p>
             
             {/* 连接状态显示 */}
@@ -517,7 +605,7 @@ export default function TextTransfer({
               ) : (
                 <>
                   <Download className="w-5 h-5 mr-2" />
-                  获取文字
+                  加入房间
                 </>
               )}
             </Button>

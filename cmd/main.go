@@ -62,7 +62,7 @@ func main() {
 
 	// 文字传输API路由
 	r.Post("/api/create-text-room", h.CreateTextRoomHandler)
-	r.Get("/api/get-text-content/*", h.GetTextContentHandler)
+	r.Get("/api/get-text-content", h.GetTextContentHandler)
 
 	// 启动服务器
 	srv := &http.Server{

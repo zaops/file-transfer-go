@@ -752,28 +752,10 @@ export default function HomePage() {
                     }
                   }}
                   onReceiveText={async (code: string) => {
-                    try {
-                      const response = await fetch('/api/get-text-content', {
-                        method: 'POST',
-                        headers: {
-                          'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ code }),
-                      });
-
-                      const data = await response.json();
-                      
-                      if (!response.ok) {
-                        const errorMessage = data.error || '获取文字内容失败';
-                        showNotification(errorMessage, 'error');
-                        return ''; // 返回空字符串而不是抛出错误
-                      }
-                      return data.text;
-                    } catch (error) {
-                      console.error('获取文字内容失败:', error);
-                      showNotification('网络错误，请重试', 'error');
-                      return ''; // 返回空字符串而不是抛出错误
-                    }
+                    // 文字内容现在通过WebSocket获取，不再需要HTTP API
+                    // 这个函数保留是为了兼容性，实际内容通过WebSocket的text-content消息获取
+                    console.log('onReceiveText被调用，但文字内容将通过WebSocket获取:', code);
+                    return '';
                   }}
                   websocket={websocket}
                   isConnected={isConnected}

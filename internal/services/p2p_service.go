@@ -162,14 +162,29 @@ func (p *P2PService) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	room.Clients[clientID] = client
 	log.Printf("%s连接到房间: %s (客户端ID: %s)", role, code, clientID)
 
-	// 如果是接收方，发送文件列表
+	// 如果是接收方，发送相应内容
 	if role == "receiver" {
-		filesMsg := models.VideoMessage{
-			Type:    "file-list",
-			Payload: map[string]interface{}{"files": room.Files},
-		}
-		if err := conn.WriteJSON(filesMsg); err != nil {
-			log.Printf("发送文件列表失败: %v", err)
+		// 如果是文字房间，发送文字内容
+		if room.IsTextRoom {
+			textMsg := models.VideoMessage{
+				Type: "text-content",
+				Payload: map[string]interface{}{
+					"text":         room.TextContent,
+					"is_text_room": true,
+				},
+			}
+			if err := conn.WriteJSON(textMsg); err != nil {
+				log.Printf("发送文字内容失败: %v", err)
+			}
+		} else {
+			// 如果是文件房间，发送文件列表
+			filesMsg := models.VideoMessage{
+				Type:    "file-list",
+				Payload: map[string]interface{}{"files": room.Files},
+			}
+			if err := conn.WriteJSON(filesMsg); err != nil {
+				log.Printf("发送文件列表失败: %v", err)
+			}
 		}
 
 		// 通知所有发送方有新的接收方加入
@@ -181,6 +196,20 @@ func (p *P2PService) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 			},
 		})
 	} else if role == "sender" {
+		// 如果是文字房间且发送方连接，也发送当前文字内容用于同步
+		if room.IsTextRoom {
+			textMsg := models.VideoMessage{
+				Type: "text-content",
+				Payload: map[string]interface{}{
+					"text":         room.TextContent,
+					"is_text_room": true,
+				},
+			}
+			if err := conn.WriteJSON(textMsg); err != nil {
+				log.Printf("发送文字内容失败: %v", err)
+			}
+		}
+
 		// 通知所有接收方有新的发送方加入
 		p.notifyClients(room, "receiver", models.VideoMessage{
 			Type: "new-sender",
@@ -590,6 +619,16 @@ func (p *P2PService) UpdateRoomFiles(code string, files []models.FileTransferInf
 // handleTextUpdate 处理实时文字更新
 func (p *P2PService) handleTextUpdate(room *FileTransferRoom, senderID string, msg models.VideoMessage) {
 	log.Printf("处理文字更新: 来自客户端 %s", senderID)
+
+	// 更新房间的文字内容
+	if payload, ok := msg.Payload.(map[string]interface{}); ok {
+		if textContent, exists := payload["text"].(string); exists {
+			room.mutex.Lock()
+			room.TextContent = textContent
+			room.mutex.Unlock()
+			log.Printf("房间 %s 文字内容已更新", room.Code)
+		}
+	}
 
 	// 转发文字更新给房间内其他所有客户端
 	room.mutex.RLock()

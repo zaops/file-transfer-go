@@ -12,13 +12,24 @@ export function useWebSocket(): UseWebSocketReturn {
   const currentRoleRef = useRef<'sender' | 'receiver'>('sender');
 
   const connect = useCallback((code: string, role: 'sender' | 'receiver') => {
-    // 防止重复连接
-    if (websocket && websocket.readyState === WebSocket.OPEN && currentCodeRef.current === code) {
-      console.log('WebSocket已连接，跳过重复连接');
+    // 防止重复连接 - 更严格的检查
+    if (websocket && 
+        (websocket.readyState === WebSocket.OPEN || websocket.readyState === WebSocket.CONNECTING) && 
+        currentCodeRef.current === code && 
+        currentRoleRef.current === role) {
+      console.log('WebSocket已连接或正在连接，跳过重复连接', {
+        readyState: websocket.readyState,
+        currentCode: currentCodeRef.current,
+        newCode: code,
+        currentRole: currentRoleRef.current,
+        newRole: role
+      });
       return;
     }
 
+    // 如果有现有连接，先关闭
     if (websocket) {
+      console.log('关闭现有WebSocket连接');
       websocket.close();
     }
 
@@ -70,6 +81,12 @@ export function useWebSocket(): UseWebSocketReturn {
       setIsConnected(false);
       setWebsocket(null);
       
+      // 发送连接关闭事件
+      const closeEvent = new CustomEvent('websocket-close', {
+        detail: { code: event.code, reason: event.reason }
+      });
+      window.dispatchEvent(closeEvent);
+      
       // 如果不是正常关闭且有房间码，尝试重连
       if (event.code !== 1000 && currentCodeRef.current) {
         console.log('尝试重新连接...');
@@ -81,6 +98,12 @@ export function useWebSocket(): UseWebSocketReturn {
 
     ws.onerror = (error) => {
       console.error('WebSocket错误:', error);
+      
+      // 发送连接错误事件
+      const errorEvent = new CustomEvent('websocket-error', {
+        detail: { error }
+      });
+      window.dispatchEvent(errorEvent);
     };
   }, [websocket]);
 

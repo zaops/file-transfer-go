@@ -109,3 +109,4 @@ backup/
 ./chuan/.next
 ./internal/web/frontend/*
 ./file-transfer-server
+file-transfer-server

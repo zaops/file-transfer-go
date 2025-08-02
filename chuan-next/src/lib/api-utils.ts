@@ -17,11 +17,10 @@ export async function apiFetch(
   // 检查是否在客户端
   const isClient = typeof window !== 'undefined';
   
-  // 检查是否为静态导出模式 - 简化判断逻辑
+  // 检查是否为静态导出模式 - 修复开发模式判断
   const isStaticExport = 
     process.env.NEXT_EXPORT === 'true' ||
-    process.env.NODE_ENV === 'production' ||
-    (isClient && !window.location.origin.includes('localhost:3000'));
+    (process.env.NODE_ENV === 'production' && isClient && !window.location.origin.includes('localhost:3000'));
   
   if (isClient) {
     if (isStaticExport) {

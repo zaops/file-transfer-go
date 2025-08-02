@@ -232,10 +232,7 @@ func (h *Handler) GetTextContentHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// 从URL路径中提取code
-	path := r.URL.Path
-	code := path[len("/api/get-text-content/"):]
-
+	code := r.URL.Query().Get("code")
 	if code == "" || len(code) != 6 {
 		http.Error(w, "请提供正确的6位房间码", http.StatusBadRequest)
 		return
