@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { toast } from '@/hooks/use-toast';
+import { useToast } from '@/components/ui/toast-simple';
 import { Upload, FileText, Image, Video, Music, Archive, X } from 'lucide-react';
 
 interface FileInfo {
@@ -32,6 +32,7 @@ const formatFileSize = (bytes: number): string => {
 
 interface WebRTCFileUploadProps {
   selectedFiles: File[];
+  fileList?: FileInfo[]; // 添加文件列表信息（包含状态和进度）
   onFilesChange: (files: File[]) => void;
   onGenerateCode: () => void;
   pickupCode?: string;
@@ -49,6 +50,7 @@ interface WebRTCFileUploadProps {
 
 export function WebRTCFileUpload({
   selectedFiles,
+  fileList = [],
   onFilesChange,
   onGenerateCode,
   pickupCode,
@@ -254,31 +256,77 @@ export function WebRTCFileUpload({
         </div>
 
         <div className="space-y-3 mb-4 sm:mb-6">
-          {selectedFiles.map((file, index) => (
-            <div
-              key={`${file.name}-${file.size}-${index}`}
-              className="group flex items-center justify-between p-3 sm:p-4 bg-gradient-to-r from-slate-50 to-blue-50 border border-slate-200 rounded-xl hover:shadow-md transition-all duration-200"
-            >
-              <div className="flex items-center space-x-3 sm:space-x-4 min-w-0 flex-1">
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-lg flex items-center justify-center flex-shrink-0">
-                  {getFileIcon(file.type)}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium text-slate-800 truncate text-sm sm:text-base">{file.name}</p>
-                  <p className="text-xs sm:text-sm text-slate-500">{formatFileSize(file.size)}</p>
-                </div>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => removeFile(index)}
-                disabled={disabled}
-                className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all duration-200 flex-shrink-0 ml-2"
+          {selectedFiles.map((file, index) => {
+            // 查找对应的文件信息（包含状态和进度）
+            const fileInfo = fileList.find(f => f.name === file.name && f.size === file.size);
+            const isTransferringThisFile = fileInfo?.status === 'downloading';
+            const currentProgress = fileInfo?.progress || 0;
+            const fileStatus = fileInfo?.status || 'ready';
+            
+            return (
+              <div
+                key={`${file.name}-${file.size}-${index}`}
+                className="group bg-gradient-to-r from-slate-50 to-blue-50 border border-slate-200 rounded-xl hover:shadow-md transition-all duration-200"
               >
-                <X className="w-4 h-4" />
-              </Button>
-            </div>
-          ))}
+                <div className="flex items-center justify-between p-3 sm:p-4">
+                  <div className="flex items-center space-x-3 sm:space-x-4 min-w-0 flex-1">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                      {getFileIcon(file.type)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-slate-800 truncate text-sm sm:text-base">{file.name}</p>
+                      <div className="flex items-center space-x-2">
+                        <p className="text-xs sm:text-sm text-slate-500">{formatFileSize(file.size)}</p>
+                        {fileStatus === 'downloading' && (
+                          <div className="flex items-center space-x-1">
+                            <div className="w-1 h-1 bg-orange-500 rounded-full animate-pulse"></div>
+                            <span className="text-xs text-orange-600 font-medium">传输中</span>
+                          </div>
+                        )}
+                        {fileStatus === 'completed' && (
+                          <div className="flex items-center space-x-1">
+                            <div className="w-1 h-1 bg-emerald-500 rounded-full"></div>
+                            <span className="text-xs text-emerald-600 font-medium">已完成</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeFile(index)}
+                    disabled={disabled || fileStatus === 'downloading'}
+                    className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all duration-200 flex-shrink-0 ml-2 disabled:opacity-50"
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+                
+                {/* 传输进度条 */}
+                {(fileStatus === 'downloading' || fileStatus === 'completed') && currentProgress > 0 && (
+                  <div className="px-3 sm:px-4 pb-3 sm:pb-4">
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-xs text-slate-600">
+                        <span>{fileStatus === 'downloading' ? '正在发送...' : '发送完成'}</span>
+                        <span className="font-medium">{currentProgress.toFixed(1)}%</span>
+                      </div>
+                      <div className="w-full bg-slate-200 rounded-full h-2">
+                        <div 
+                          className={`h-2 rounded-full transition-all duration-300 ${
+                            fileStatus === 'completed'
+                              ? 'bg-gradient-to-r from-emerald-500 to-emerald-600' 
+                              : 'bg-gradient-to-r from-orange-500 to-orange-600'
+                          }`}
+                          style={{ width: `${currentProgress}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         {/* 操作按钮 */}

@@ -4,6 +4,7 @@ import React, { useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Download, FileText, Image, Video, Music, Archive } from 'lucide-react';
+import { useToast } from '@/components/ui/toast-simple';
 
 interface FileInfo {
   id: string;
@@ -34,31 +35,76 @@ interface WebRTCFileReceiveProps {
   onJoinRoom: (code: string) => void;
   files: FileInfo[];
   onDownloadFile: (fileId: string) => void;
-  transferProgress: number;
-  isTransferring: boolean;
   isConnected: boolean;
   isConnecting: boolean;
   isWebSocketConnected?: boolean;
   downloadedFiles?: Map<string, File>;
+  error?: string | null;
+  onReset?: () => void;
 }
 
 export function WebRTCFileReceive({
   onJoinRoom,
   files,
   onDownloadFile,
-  transferProgress,
-  isTransferring,
   isConnected,
   isConnecting,
   isWebSocketConnected = false,
-  downloadedFiles
+  downloadedFiles,
+  error = null,
+  onReset
 }: WebRTCFileReceiveProps) {
   const [pickupCode, setPickupCode] = useState('');
+  const [isValidating, setIsValidating] = useState(false);
+  const { showToast } = useToast();
 
-  const handleSubmit = useCallback((e: React.FormEvent) => {
+  // 验证取件码是否存在
+  const validatePickupCode = async (code: string): Promise<boolean> => {
+    try {
+      setIsValidating(true);
+      
+      console.log('开始验证取件码:', code);
+      const response = await fetch(`/api/room-info?code=${code}`);
+      const data = await response.json();
+      
+      console.log('验证响应:', { status: response.status, data });
+      
+      if (!response.ok || !data.success) {
+        const errorMessage = data.message || '取件码验证失败';
+        
+        // 显示toast错误提示
+        showToast(errorMessage, 'error');
+        
+        console.log('验证失败:', errorMessage);
+        return false;
+      }
+      
+      console.log('取件码验证成功:', data.room);
+      return true;
+    } catch (error) {
+      console.error('验证取件码时发生错误:', error);
+      const errorMessage = '网络错误，请检查连接后重试';
+      
+      // 显示toast错误提示
+      showToast(errorMessage, 'error');
+      
+      return false;
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (pickupCode.length === 6) {
-      onJoinRoom(pickupCode.toUpperCase());
+      const code = pickupCode.toUpperCase();
+      
+      // 先验证取件码是否存在
+      const isValid = await validatePickupCode(code);
+      if (isValid) {
+        // 验证成功后再进行WebRTC连接
+        onJoinRoom(code);
+      }
     }
   }, [pickupCode, onJoinRoom]);
 
@@ -68,6 +114,19 @@ export function WebRTCFileReceive({
       setPickupCode(value);
     }
   }, []);
+
+  // 当验证失败时重置输入状态
+  React.useEffect(() => {
+    if (error && !isConnecting && !isConnected && !isValidating) {
+      // 延迟重置，确保用户能看到错误信息
+      const timer = setTimeout(() => {
+        console.log('重置取件码输入');
+        setPickupCode('');
+      }, 3000); // 3秒后重置
+      
+      return () => clearTimeout(timer);
+    }
+  }, [error, isConnecting, isConnected, isValidating]);
 
   // 如果已经连接但没有文件，显示等待界面
   if ((isConnected || isConnecting) && files.length === 0) {
@@ -237,15 +296,13 @@ export function WebRTCFileReceive({
               const isDownloading = file.status === 'downloading';
               const isCompleted = file.status === 'completed';
               const hasDownloadedFile = downloadedFiles?.has(file.id);
-              const currentProgress = isDownloading && isTransferring ? transferProgress : file.progress;
+              const currentProgress = file.progress;
               
               console.log('文件状态:', {
                 fileName: file.name,
                 status: file.status,
                 progress: file.progress,
                 isDownloading,
-                isTransferring,
-                transferProgress,
                 currentProgress
               });
               
@@ -262,24 +319,24 @@ export function WebRTCFileReceive({
                         {hasDownloadedFile && (
                           <p className="text-xs text-emerald-600 font-medium">✅ 传输完成，点击保存</p>
                         )}
-                        {isDownloading && isTransferring && (
+                        {isDownloading && (
                           <p className="text-xs text-blue-600 font-medium">⏳ 传输中...{currentProgress.toFixed(1)}%</p>
                         )}
                       </div>
                     </div>
                     <Button
                       onClick={() => onDownloadFile(file.id)}
-                      disabled={!isConnected || (isDownloading && isTransferring)}
+                      disabled={!isConnected || isDownloading}
                       className={`px-6 py-2 rounded-lg font-medium shadow-lg transition-all duration-200 hover:shadow-xl ${
                         hasDownloadedFile 
                           ? 'bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white'
-                          : (isDownloading && isTransferring)
+                          : isDownloading
                           ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
                           : 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white'
                       }`}
                     >
                       <Download className="w-4 h-4 mr-2" />
-                      {(isDownloading && isTransferring) ? '传输中...' : hasDownloadedFile ? '保存文件' : '开始传输'}
+                      {isDownloading ? '传输中...' : hasDownloadedFile ? '保存文件' : '开始传输'}
                     </Button>
                   </div>
                   
@@ -387,7 +444,7 @@ export function WebRTCFileReceive({
               placeholder="请输入取件码"
               className="text-center text-2xl sm:text-3xl tracking-[0.3em] sm:tracking-[0.5em] font-mono h-12 sm:h-16 border-2 border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-emerald-500 bg-white/80 backdrop-blur-sm pb-2 sm:pb-4"
               maxLength={6}
-              disabled={isConnecting}
+              disabled={isValidating || isConnecting}
             />
             <div className="absolute inset-x-0 -bottom-4 sm:-bottom-6 flex justify-center space-x-1 sm:space-x-2">
               {[...Array(6)].map((_, i) => (
@@ -411,9 +468,14 @@ export function WebRTCFileReceive({
         <Button 
           type="submit" 
           className="w-full h-10 sm:h-12 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white text-base sm:text-lg font-medium rounded-xl shadow-lg transition-all duration-200 hover:shadow-xl hover:scale-105 disabled:opacity-50 disabled:scale-100" 
-          disabled={pickupCode.length !== 6 || isConnecting}
+          disabled={pickupCode.length !== 6 || isValidating || isConnecting}
         >
-          {isConnecting ? (
+          {isValidating ? (
+            <div className="flex items-center space-x-2">
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              <span>验证中...</span>
+            </div>
+          ) : isConnecting ? (
             <div className="flex items-center space-x-2">
               <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
               <span>连接中...</span>

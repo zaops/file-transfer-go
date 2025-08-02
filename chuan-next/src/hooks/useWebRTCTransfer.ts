@@ -141,6 +141,7 @@ export function useWebRTCTransfer() {
     // 回调注册
     onFileRequested: fileTransfer.onFileRequested,
     onFileReceived: fileTransfer.onFileReceived,
+    onFileProgress: fileTransfer.onFileProgress,
     onFileListReceived,
   };
 }

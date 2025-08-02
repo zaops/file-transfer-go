@@ -58,6 +58,10 @@ func main() {
 	r.Post("/api/create-text-room", h.CreateTextRoomHandler)
 	r.Get("/api/get-text-content", h.GetTextContentHandler)
 
+	// 文件传输API路由
+	r.Post("/api/create-room", h.CreateRoomHandler)
+	r.Get("/api/room-info", h.RoomInfoHandler)
+
 	// 启动服务器
 	srv := &http.Server{
 		Addr:         ":8080",

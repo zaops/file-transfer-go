@@ -2,10 +2,13 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"net/http"
 	"path/filepath"
+	"time"
 
+	"chuan/internal/models"
 	"chuan/internal/services"
 )
 
@@ -138,4 +141,141 @@ func (h *Handler) GetTextContentHandler(w http.ResponseWriter, r *http.Request) 
 // HandleWebRTCWebSocket 处理WebRTC信令WebSocket连接
 func (h *Handler) HandleWebRTCWebSocket(w http.ResponseWriter, r *http.Request) {
 	h.webrtcService.HandleWebSocket(w, r)
+}
+
+// CreateRoomHandler 创建文件传输房间API
+func (h *Handler) CreateRoomHandler(w http.ResponseWriter, r *http.Request) {
+	// 设置响应为JSON格式
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"message": "方法不允许",
+		})
+		return
+	}
+
+	var req struct {
+		Files []struct {
+			Name         string `json:"name"`
+			Size         int64  `json:"size"`
+			Type         string `json:"type"`
+			LastModified int64  `json:"lastModified"`
+		} `json:"files"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"message": "解析请求失败",
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	if len(req.Files) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"message": "至少需要选择一个文件",
+		})
+		return
+	}
+
+	// 验证文件信息
+	for _, file := range req.Files {
+		if file.Name == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": false,
+				"message": "文件名不能为空",
+			})
+			return
+		}
+		if file.Size <= 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": false,
+				"message": "文件大小必须大于0",
+			})
+			return
+		}
+
+	}
+
+	// 转换文件信息
+	var fileInfos []models.FileTransferInfo
+	for i, file := range req.Files {
+		fileInfos = append(fileInfos, models.FileTransferInfo{
+			ID:           fmt.Sprintf("file_%d_%d", time.Now().Unix(), i),
+			Name:         file.Name,
+			Size:         file.Size,
+			Type:         file.Type,
+			LastModified: file.LastModified,
+		})
+	}
+
+	// 创建文件传输房间
+	code := h.p2pService.CreateRoom(fileInfos)
+
+	response := map[string]interface{}{
+		"success": true,
+		"code":    code,
+		"message": "文件传输房间创建成功",
+		"files":   fileInfos,
+	}
+
+	json.NewEncoder(w).Encode(response)
+}
+
+// RoomInfoHandler 获取房间信息API
+func (h *Handler) RoomInfoHandler(w http.ResponseWriter, r *http.Request) {
+	// 设置响应为JSON格式
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method != http.MethodGet {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"message": "方法不允许",
+		})
+		return
+	}
+
+	code := r.URL.Query().Get("code")
+	if code == "" || len(code) != 6 {
+
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"message": "请提供正确的6位房间码",
+		})
+		return
+	}
+
+	// 获取房间信息
+	room, exists := h.p2pService.GetRoomByCode(code)
+	if !exists {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"message": "房间不存在或已过期",
+		})
+		return
+	}
+
+	// 构建响应
+	response := map[string]interface{}{
+		"success": true,
+		"message": "房间信息获取成功",
+		"room": map[string]interface{}{
+			"code":         room.Code,
+			"files":        room.Files,
+			"file_count":   len(room.Files),
+			"is_text_room": room.IsTextRoom,
+			"created_at":   room.CreatedAt,
+		},
+	}
+
+	json.NewEncoder(w).Encode(response)
 }

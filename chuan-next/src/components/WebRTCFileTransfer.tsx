@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useWebRTCTransfer } from '@/hooks/useWebRTCTransfer';
 import { Button } from '@/components/ui/button';
-import { toast } from '@/hooks/use-toast';
+import { useToast } from '@/components/ui/toast-simple';
 import { Upload, Download } from 'lucide-react';
 import { WebRTCFileUpload } from '@/components/webrtc/WebRTCFileUpload';
 import { WebRTCFileReceive } from '@/components/webrtc/WebRTCFileReceive';
@@ -21,11 +21,17 @@ interface FileInfo {
 export const WebRTCFileTransfer: React.FC = () => {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { showToast } = useToast();
   
   // 独立的文件状态
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [fileList, setFileList] = useState<FileInfo[]>([]);
   const [downloadedFiles, setDownloadedFiles] = useState<Map<string, File>>(new Map());
+  const [currentTransferFile, setCurrentTransferFile] = useState<{
+    fileId: string;
+    fileName: string;
+    progress: number;
+  } | null>(null);
   
   // 房间状态
   const [pickupCode, setPickupCode] = useState('');
@@ -34,9 +40,8 @@ export const WebRTCFileTransfer: React.FC = () => {
   
   const {
     isConnected,
-    isTransferring,
+    isConnecting,
     isWebSocketConnected,
-    transferProgress,
     error,
     connect,
     disconnect,
@@ -45,7 +50,8 @@ export const WebRTCFileTransfer: React.FC = () => {
     requestFile: requestFileFromHook,
     onFileReceived,
     onFileListReceived,
-    onFileRequested
+    onFileRequested,
+    onFileProgress
   } = useWebRTCTransfer();
 
   // 从URL参数中获取初始模式
@@ -112,11 +118,7 @@ export const WebRTCFileTransfer: React.FC = () => {
   // 创建房间 (发送模式)
   const generateCode = async () => {
     if (selectedFiles.length === 0) {
-      toast({
-        title: "请先选择文件",
-        description: "需要选择文件才能创建传输房间",
-        variant: "destructive",
-      });
+      showToast("需要选择文件才能创建传输房间", "error");
       return;
     }
 
@@ -154,17 +156,10 @@ export const WebRTCFileTransfer: React.FC = () => {
       // 连接WebRTC作为发送方
       connect(code, 'sender');
       
-      toast({
-        title: "房间创建成功",
-        description: `取件码: ${code}`,
-      });
+      showToast(`房间创建成功，取件码: ${code}`, "success");
     } catch (error) {
       console.error('创建房间失败:', error);
-      toast({
-        title: "创建房间失败",
-        description: error instanceof Error ? error.message : '网络错误，请重试',
-        variant: "destructive",
-      });
+      showToast(error instanceof Error ? error.message : '网络错误，请重试', "error");
     }
   };
 
@@ -176,10 +171,27 @@ export const WebRTCFileTransfer: React.FC = () => {
     setPickupCode(code.trim());
     connect(code.trim(), 'receiver');
     
-    toast({
-      title: "正在连接...",
-      description: `尝试连接到房间: ${code}`,
-    });
+    showToast(`正在连接到房间: ${code}`, "info");
+  };
+
+  // 重置连接状态 (用于连接失败后重新输入)
+  const resetConnection = () => {
+    console.log('=== 重置连接状态 ===');
+    
+    // 断开当前连接
+    disconnect();
+    
+    // 清空状态
+    setPickupCode('');
+    setFileList([]);
+    setDownloadedFiles(new Map());
+    
+    // 如果是接收模式，更新URL移除code参数
+    if (mode === 'receive') {
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete('code');
+      router.push(`?${params.toString()}`, { scroll: false });
+    }
   };
 
   // 处理文件列表更新
@@ -197,6 +209,17 @@ export const WebRTCFileTransfer: React.FC = () => {
     return cleanup;
   }, [onFileListReceived, mode]);
 
+  // 处理连接错误
+  useEffect(() => {
+    if (error && mode === 'receive') {
+      console.log('=== 连接错误处理 ===');
+      console.log('错误信息:', error);
+      
+      // 显示错误提示
+      showToast(`连接失败: ${error}`, "error");
+    }
+  }, [error, mode, showToast]);
+
   // 处理文件接收
   useEffect(() => {
     const cleanup = onFileReceived((fileData: { id: string; file: File }) => {
@@ -213,31 +236,51 @@ export const WebRTCFileTransfer: React.FC = () => {
           : item
       ));
       
-      toast({
-        title: "文件下载完成",
-        description: `${fileData.file.name} 已准备好下载`,
-      });
+      showToast(`${fileData.file.name} 已准备好下载`, "success");
     });
 
     return cleanup;
-  }, [onFileReceived]);
+  }, [onFileReceived, showToast]);
 
-  // 实时更新传输进度
+  // 监听文件级别的进度更新
   useEffect(() => {
-    console.log('=== 进度更新 ===');
-    console.log('传输中:', isTransferring, '进度:', transferProgress);
-    
-    if (isTransferring && transferProgress > 0) {
-      console.log('更新文件传输进度:', transferProgress);
+    const cleanup = onFileProgress((progressInfo) => {
+      console.log('=== 文件进度更新 ===');
+      console.log('文件:', progressInfo.fileName, 'ID:', progressInfo.fileId, '进度:', progressInfo.progress);
+      
+      // 更新当前传输文件信息
+      setCurrentTransferFile({
+        fileId: progressInfo.fileId,
+        fileName: progressInfo.fileName,
+        progress: progressInfo.progress
+      });
+      
+      // 更新文件列表中对应文件的进度
       setFileList(prev => prev.map(item => {
-        if (item.status === 'downloading') {
-          console.log(`更新文件 ${item.name} 进度从 ${item.progress} 到 ${transferProgress}`);
-          return { ...item, progress: transferProgress };
+        if (item.id === progressInfo.fileId || item.name === progressInfo.fileName) {
+          const newProgress = progressInfo.progress;
+          const newStatus = newProgress >= 100 ? 'completed' as const : 'downloading' as const;
+          
+          console.log(`更新文件 ${item.name} 进度: ${item.progress} -> ${newProgress}`);
+          return { ...item, progress: newProgress, status: newStatus };
         }
         return item;
       }));
-    }
-  }, [isTransferring, transferProgress]);
+      
+      // 当传输完成时显示提示
+      if (progressInfo.progress >= 100 && mode === 'send') {
+        showToast(`文件发送完成: ${progressInfo.fileName}`, "success");
+        setCurrentTransferFile(null);
+      }
+    });
+
+    return cleanup;
+  }, [onFileProgress, mode, showToast]);
+
+  // 实时更新传输进度（旧逻辑 - 删除）
+  // useEffect(() => {
+  //   ...已删除的旧代码...
+  // }, [...]);
 
   // 处理文件请求（发送方监听）
   useEffect(() => {
@@ -254,25 +297,31 @@ export const WebRTCFileTransfer: React.FC = () => {
         if (!file) {
           console.error('找不到匹配的文件:', fileName);
           console.log('可用文件:', selectedFiles.map(f => `${f.name} (${f.size} bytes)`));
-          toast({
-            title: "文件不存在",
-            description: `无法找到文件: ${fileName}`,
-            variant: "destructive",
-          });
+          showToast(`无法找到文件: ${fileName}`, "error");
           return;
         }
         
         console.log('找到匹配文件，开始发送:', file.name, 'ID:', fileId, '文件大小:', file.size);
         
+        // 更新发送方文件状态为downloading
+        setFileList(prev => prev.map(item => 
+          item.id === fileId || item.name === fileName
+            ? { ...item, status: 'downloading' as const, progress: 0 }
+            : item
+        ));
+        
         // 发送文件
         sendFile(file, fileId);
+        
+        // 显示开始传输的提示
+        showToast(`开始发送文件: ${fileName}`, "info");
       } else {
         console.warn('接收模式下收到文件请求，忽略');
       }
     });
 
     return cleanup;
-  }, [onFileRequested, mode, selectedFiles, sendFile, toast]);
+  }, [onFileRequested, mode, selectedFiles, sendFile, showToast]);
 
   // 连接状态变化时同步文件列表
   useEffect(() => {
@@ -328,7 +377,7 @@ export const WebRTCFileTransfer: React.FC = () => {
     console.log('=== 开始请求文件 ===');
     console.log('文件信息:', { name: fileInfo.name, id: fileId, size: fileInfo.size });
     console.log('当前文件状态:', fileInfo.status);
-    console.log('WebRTC连接状态:', { isConnected, isTransferring });
+    console.log('WebRTC连接状态:', { isConnected, isTransferring: !!currentTransferFile });
     
     // 更新文件状态为下载中
     setFileList(prev => {
@@ -345,29 +394,20 @@ export const WebRTCFileTransfer: React.FC = () => {
     console.log('调用hook的requestFile...');
     requestFileFromHook(fileId, fileInfo.name);
     
-    toast({
-      title: "请求文件",
-      description: `正在请求文件: ${fileInfo.name}`,
-    });
+    showToast(`正在请求文件: ${fileInfo.name}`, "info");
   };
 
   // 复制取件码
   const copyCode = () => {
     navigator.clipboard.writeText(pickupCode);
-    toast({
-      title: "取件码已复制",
-      description: "取件码已复制到剪贴板",
-    });
+    showToast("取件码已复制到剪贴板", "success");
   };
 
   // 复制链接
   const copyLink = () => {
     const link = `${window.location.origin}?type=webrtc&mode=receive&code=${pickupCode}`;
     navigator.clipboard.writeText(link);
-    toast({
-      title: "取件链接已复制",
-      description: "取件链接已复制到剪贴板",
-    });
+    showToast("取件链接已复制到剪贴板", "success");
   };
 
   // 重置状态
@@ -409,10 +449,7 @@ export const WebRTCFileTransfer: React.FC = () => {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     
-    toast({
-      title: "文件已保存",
-      description: `${file.name} 已保存到下载文件夹`,
-    });
+    showToast(`${file.name} 已保存到下载文件夹`, "success");
   };
 
   // 处理下载请求（接收模式）
@@ -432,13 +469,9 @@ export const WebRTCFileTransfer: React.FC = () => {
   // 显示错误信息
   useEffect(() => {
     if (error) {
-      toast({
-        title: "连接错误",
-        description: error,
-        variant: "destructive",
-      });
+      showToast(error, "error");
     }
-  }, [error]);
+  }, [error, showToast]);
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -468,6 +501,7 @@ export const WebRTCFileTransfer: React.FC = () => {
         <div className="bg-white/80 backdrop-blur-sm rounded-xl p-4 sm:p-6 shadow-lg border border-white/20 animate-fade-in-up">
           <WebRTCFileUpload
             selectedFiles={selectedFiles}
+            fileList={fileList}
             onFilesChange={setSelectedFiles}
             onGenerateCode={generateCode}
             pickupCode={pickupCode}
@@ -478,7 +512,7 @@ export const WebRTCFileTransfer: React.FC = () => {
             onRemoveFile={setSelectedFiles}
             onClearFiles={clearFiles}
             onReset={resetRoom}
-            disabled={isTransferring}
+            disabled={!!currentTransferFile}
             isConnected={isConnected}
             isWebSocketConnected={isWebSocketConnected}
           />
@@ -489,12 +523,12 @@ export const WebRTCFileTransfer: React.FC = () => {
             onJoinRoom={joinRoom}
             files={fileList}
             onDownloadFile={handleDownloadRequest}
-            transferProgress={transferProgress}
-            isTransferring={isTransferring}
             isConnected={isConnected}
-            isConnecting={!!pickupCode && !isConnected}
+            isConnecting={isConnecting}
             isWebSocketConnected={isWebSocketConnected}
             downloadedFiles={downloadedFiles}
+            error={error}
+            onReset={resetConnection}
           />
         </div>
       )}

@@ -7,6 +7,12 @@ interface FileTransferState {
   error: string | null;
 }
 
+interface FileProgressInfo {
+  fileId: string;
+  fileName: string;
+  progress: number;
+}
+
 interface FileChunk {
   fileId: string;
   chunkIndex: number;
@@ -21,7 +27,7 @@ interface FileMetadata {
   type: string;
 }
 
-const CHUNK_SIZE = 16 * 1024; // 16KB chunks
+const CHUNK_SIZE = 256 * 1024; // 256KB chunks - 平衡传输效率和内存使用
 
 export function useFileTransfer() {
   const [state, setState] = useState<FileTransferState>({
@@ -39,9 +45,17 @@ export function useFileTransfer() {
     totalChunks: number;
   }>>(new Map());
 
+  // 存储当前正在接收的块信息
+  const expectedChunk = useRef<{
+    fileId: string;
+    chunkIndex: number;
+    totalChunks: number;
+  } | null>(null);
+
   // 文件请求回调
   const fileRequestCallbacks = useRef<Array<(fileId: string, fileName: string) => void>>([]);
   const fileReceivedCallbacks = useRef<Array<(fileData: { id: string; file: File }) => void>>([]);
+  const fileProgressCallbacks = useRef<Array<(progressInfo: FileProgressInfo) => void>>([]);
 
   const updateState = useCallback((updates: Partial<FileTransferState>) => {
     setState(prev => ({ ...prev, ...updates }));
@@ -107,27 +121,54 @@ export function useFileTransfer() {
           if (event.target?.result && dataChannel.readyState === 'open') {
             const arrayBuffer = event.target.result as ArrayBuffer;
             
-            // 发送分块数据
-            const chunkMessage = JSON.stringify({
-              type: 'file-chunk',
-              payload: {
-                fileId,
-                chunkIndex: sentChunks,
-                totalChunks
-              }
-            });
-            
-            dataChannel.send(chunkMessage);
-            dataChannel.send(arrayBuffer);
+            // 检查缓冲区状态，避免过度缓冲
+            if (dataChannel.bufferedAmount > 1024 * 1024) { // 1MB 缓冲区限制
+              console.log('数据通道缓冲区满，等待清空...');
+              // 等待缓冲区清空后再发送
+              const waitForBuffer = () => {
+                if (dataChannel.bufferedAmount < 256 * 1024) { // 等到缓冲区低于 256KB
+                  sendChunkData();
+                } else {
+                  setTimeout(waitForBuffer, 10);
+                }
+              };
+              waitForBuffer();
+            } else {
+              sendChunkData();
+            }
 
-            sentChunks++;
-            const progress = (sentChunks / totalChunks) * 100;
-            updateState({ transferProgress: progress });
+            function sendChunkData() {
+              // 发送分块数据
+              const chunkMessage = JSON.stringify({
+                type: 'file-chunk',
+                payload: {
+                  fileId,
+                  chunkIndex: sentChunks,
+                  totalChunks
+                }
+              });
+              
+              dataChannel.send(chunkMessage);
+              dataChannel.send(arrayBuffer);
 
-            console.log(`发送进度: ${progress.toFixed(1)}%, 块: ${sentChunks}/${totalChunks}`);
+              sentChunks++;
+              const progress = (sentChunks / totalChunks) * 100;
+              updateState({ transferProgress: progress });
 
-            // 短暂延迟，避免阻塞
-            setTimeout(sendNextChunk, 10);
+              // 通知文件级别的进度
+              fileProgressCallbacks.current.forEach(callback => {
+                callback({
+                  fileId,
+                  fileName: file.name,
+                  progress
+                });
+              });
+
+              console.log(`发送进度: ${progress.toFixed(1)}%, 块: ${sentChunks}/${totalChunks}, 文件: ${file.name}, 缓冲区: ${dataChannel.bufferedAmount} bytes`);
+
+              // 立即发送下一个块，不等待
+              sendNextChunk();
+            }
           }
         };
 
@@ -179,7 +220,15 @@ export function useFileTransfer() {
 
           case 'file-chunk':
             const chunkInfo = message.payload;
-            console.log(`接收文件块: ${chunkInfo.chunkIndex + 1}/${chunkInfo.totalChunks}`);
+            const { fileId: chunkFileId, chunkIndex, totalChunks } = chunkInfo;
+            console.log(`接收文件块信息: ${chunkIndex + 1}/${totalChunks}, 文件ID: ${chunkFileId}`);
+            
+            // 设置期望的下一个块
+            expectedChunk.current = {
+              fileId: chunkFileId,
+              chunkIndex,
+              totalChunks
+            };
             break;
 
           case 'file-end':
@@ -229,18 +278,37 @@ export function useFileTransfer() {
       const arrayBuffer = event.data;
       console.log('收到文件块数据:', arrayBuffer.byteLength, 'bytes');
 
-      // 找到最近开始接收的文件（简化逻辑）
-      for (const [fileId, fileInfo] of receivingFiles.current.entries()) {
-        if (fileInfo.receivedChunks < fileInfo.totalChunks) {
-          fileInfo.chunks.push(arrayBuffer);
-          fileInfo.receivedChunks++;
+      // 检查是否有期望的块信息
+      if (expectedChunk.current) {
+        const { fileId, chunkIndex } = expectedChunk.current;
+        const fileInfo = receivingFiles.current.get(fileId);
+        
+        if (fileInfo) {
+          // 确保chunks数组足够大
+          if (!fileInfo.chunks[chunkIndex]) {
+            fileInfo.chunks[chunkIndex] = arrayBuffer;
+            fileInfo.receivedChunks++;
 
-          const progress = (fileInfo.receivedChunks / fileInfo.totalChunks) * 100;
-          updateState({ transferProgress: progress });
+            const progress = (fileInfo.receivedChunks / fileInfo.totalChunks) * 100;
+            updateState({ transferProgress: progress });
 
-          console.log(`文件接收进度: ${progress.toFixed(1)}%, 块: ${fileInfo.receivedChunks}/${fileInfo.totalChunks}`);
-          break;
+            // 通知文件级别的进度
+            fileProgressCallbacks.current.forEach(callback => {
+              callback({
+                fileId,
+                fileName: fileInfo.metadata.name,
+                progress
+              });
+            });
+
+            console.log(`文件接收进度: ${progress.toFixed(1)}%, 块: ${fileInfo.receivedChunks}/${fileInfo.totalChunks}, 文件: ${fileInfo.metadata.name}`);
+          }
+          
+          // 清除期望的块信息
+          expectedChunk.current = null;
         }
+      } else {
+        console.warn('收到块数据但没有对应的块信息');
       }
     }
   }, [updateState]);
@@ -288,6 +356,19 @@ export function useFileTransfer() {
     };
   }, []);
 
+  // 注册文件进度回调
+  const onFileProgress = useCallback((callback: (progressInfo: FileProgressInfo) => void) => {
+    fileProgressCallbacks.current.push(callback);
+    
+    // 返回清理函数
+    return () => {
+      const index = fileProgressCallbacks.current.indexOf(callback);
+      if (index > -1) {
+        fileProgressCallbacks.current.splice(index, 1);
+      }
+    };
+  }, []);
+
   return {
     ...state,
     sendFile,
@@ -295,5 +376,6 @@ export function useFileTransfer() {
     handleMessage,
     onFileRequested,
     onFileReceived,
+    onFileProgress,
   };
 }
