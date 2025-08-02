@@ -52,13 +52,7 @@ func main() {
 
 	// 路由定义
 	r.Get("/api", h.IndexHandler) // API 状态页面
-	r.Get("/ws/p2p", h.HandleP2PWebSocket)
-
-	// API路由
-	r.Post("/api/create-room", h.CreateRoomHandler)
-	r.Get("/api/room-info", h.GetRoomInfoHandler)
-	r.Get("/api/room-status", h.GetRoomStatusHandler)
-	r.Post("/api/update-room-files", h.UpdateRoomFilesHandler)
+	r.Get("/ws/webrtc", h.HandleWebRTCWebSocket)
 
 	// 文字传输API路由
 	r.Post("/api/create-text-room", h.CreateTextRoomHandler)

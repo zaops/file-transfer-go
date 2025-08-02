@@ -512,31 +512,62 @@ export default function TextTransfer({
       </div>
 
       {mode === 'send' ? (
-        <div className="glass-card rounded-2xl p-4 sm:p-6 animate-fade-in-up">
-          <div className="text-center mb-6">
-            <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-4 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-2xl flex items-center justify-center animate-float">
-              <MessageSquare className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
+        <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-lg p-4 sm:p-6 animate-fade-in-up">
+          {/* 功能标题和状态 */}
+          <div className="flex items-center mb-6">
+            <div className="flex items-center space-x-3 flex-1">
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-xl flex items-center justify-center">
+                <MessageSquare className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-slate-800">传送文字</h2>
+                <p className="text-sm text-slate-600">
+                  {isRoomCreated ? '实时编辑，对方可以同步看到' : '输入要传输的文本内容'}
+                </p>
+              </div>
             </div>
-            <h2 className="text-xl sm:text-2xl font-semibold text-slate-800 mb-2">传送文字</h2>
-            <p className="text-sm sm:text-base text-slate-600">
-              {isRoomCreated ? '实时编辑，对方可以同步看到' : '输入要传输的文本内容'}
-            </p>
-            {/* 连接状态显示 */}
-            <div className="mt-2 space-y-1">
-              {isRoomCreated && (
-                <div className="flex items-center justify-center space-x-4 text-sm">
-                  <div className="flex items-center">
-                    <div className={`w-2 h-2 rounded-full mr-2 ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`}></div>
-                    <span className={isConnected ? 'text-emerald-600' : 'text-red-600'}>
-                      {isConnected ? '实时连接已建立' : '连接断开'}
-                    </span>
-                  </div>
-                  {connectedUsers > 0 && (
-                    <div className="flex items-center text-blue-600">
-                      <Users className="w-4 h-4 mr-1" />
-                      {connectedUsers} 人在线
-                    </div>
+            
+            {/* 竖线分割 */}
+            <div className="w-px h-12 bg-slate-200 mx-4"></div>
+            
+            {/* 状态显示 */}
+            <div className="text-right">
+              <div className="text-sm text-slate-500 mb-1">连接状态</div>
+              <div className="flex items-center justify-end space-x-3 text-sm">
+                {/* WebSocket状态 */}
+                <div className="flex items-center space-x-1">
+                  {isRoomCreated ? (
+                    isConnected ? (
+                      <>
+                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                        <span className="text-emerald-600">WS</span>
+                      </>
+                    ) : (
+                      <>
+                        <div className="w-2 h-2 rounded-full bg-red-500"></div>
+                        <span className="text-red-600">WS</span>
+                      </>
+                    )
+                  ) : (
+                    <>
+                      <div className="w-2 h-2 rounded-full bg-slate-400"></div>
+                      <span className="text-slate-600">WS</span>
+                    </>
                   )}
+                </div>
+                
+                {/* 分隔符 */}
+                <div className="text-slate-300">|</div>
+                
+                {/* WebRTC状态 */}
+                <div className="flex items-center space-x-1">
+                  <div className="w-2 h-2 rounded-full bg-slate-400"></div>
+                  <span className="text-slate-600">RTC</span>
+                </div>
+              </div>
+              {connectedUsers > 0 && (
+                <div className="mt-1 text-xs text-blue-600">
+                  {connectedUsers} 人在线
                 </div>
               )}
             </div>
@@ -690,33 +721,68 @@ export default function TextTransfer({
           </div>
         </div>
       ) : (
-        <div className="glass-card rounded-2xl p-4 sm:p-6 animate-fade-in-up">
-          <div className="text-center mb-6">
-            <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-4 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-2xl flex items-center justify-center animate-float">
-              <Download className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
+        <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-lg p-4 sm:p-6 animate-fade-in-up">
+          {/* 功能标题和状态 */}
+          <div className="flex items-center mb-6">
+            <div className="flex items-center space-x-3 flex-1">
+              <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-xl flex items-center justify-center">
+                <Download className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-slate-800">加入房间</h2>
+                <p className="text-sm text-slate-600">
+                  {(receivedText || textContent) ? 
+                    (isConnected ? '已连接，可以实时查看和编辑' : '连接断开，等待重连') : 
+                    '输入6位房间码来获取文字内容'
+                  }
+                </p>
+              </div>
             </div>
-            <h2 className="text-xl sm:text-2xl font-semibold text-slate-800 mb-2">加入房间</h2>
-            <p className="text-sm sm:text-base text-slate-600">输入6位房间码来获取文字内容</p>
             
-            {/* 连接状态显示 */}
-            {(receivedText || textContent) && (
-              <div className="mt-2 space-y-1">
-                <div className="flex items-center justify-center space-x-4 text-sm">
-                  <div className="flex items-center">
-                    <div className={`w-2 h-2 rounded-full mr-2 ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`}></div>
-                    <span className={isConnected ? 'text-emerald-600' : 'text-red-600'}>
-                      {isConnected ? '实时连接已建立' : '连接断开'}
-                    </span>
-                  </div>
-                  {connectedUsers > 0 && (
-                    <div className="flex items-center text-blue-600">
-                      <Users className="w-4 h-4 mr-1" />
-                      {connectedUsers} 人在线
-                    </div>
+            {/* 竖线分割 */}
+            <div className="w-px h-12 bg-slate-200 mx-4"></div>
+            
+            {/* 状态显示 */}
+            <div className="text-right">
+              <div className="text-sm text-slate-500 mb-1">连接状态</div>
+              <div className="flex items-center justify-end space-x-3 text-sm">
+                {/* WebSocket状态 */}
+                <div className="flex items-center space-x-1">
+                  {(receivedText || textContent) ? (
+                    isConnected ? (
+                      <>
+                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                        <span className="text-emerald-600">WS</span>
+                      </>
+                    ) : (
+                      <>
+                        <div className="w-2 h-2 rounded-full bg-red-500"></div>
+                        <span className="text-red-600">WS</span>
+                      </>
+                    )
+                  ) : (
+                    <>
+                      <div className="w-2 h-2 rounded-full bg-slate-400"></div>
+                      <span className="text-slate-600">WS</span>
+                    </>
                   )}
                 </div>
+                
+                {/* 分隔符 */}
+                <div className="text-slate-300">|</div>
+                
+                {/* WebRTC状态 */}
+                <div className="flex items-center space-x-1">
+                  <div className="w-2 h-2 rounded-full bg-slate-400"></div>
+                  <span className="text-slate-600">RTC</span>
+                </div>
               </div>
-            )}
+              {connectedUsers > 0 && (
+                <div className="mt-1 text-xs text-blue-600">
+                  {connectedUsers} 人在线
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="space-y-4">

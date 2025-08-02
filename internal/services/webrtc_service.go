@@ -1,25 +1,41 @@
 package services
 
 import (
+	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
 	"sync"
-
-	"chuan/internal/models"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
 
 type WebRTCService struct {
-	clients    map[string]*websocket.Conn
-	clientsMux sync.RWMutex
-	upgrader   websocket.Upgrader
+	rooms    map[string]*WebRTCRoom
+	roomsMux sync.RWMutex
+	upgrader websocket.Upgrader
+}
+
+type WebRTCRoom struct {
+	Code      string
+	Sender    *WebRTCClient
+	Receiver  *WebRTCClient
+	CreatedAt time.Time
+	LastOffer *WebRTCMessage // 保存最后的offer消息
+}
+
+type WebRTCClient struct {
+	ID         string
+	Role       string // "sender" or "receiver"
+	Connection *websocket.Conn
+	Room       string
 }
 
 func NewWebRTCService() *WebRTCService {
 	return &WebRTCService{
-		clients:    make(map[string]*websocket.Conn),
-		clientsMux: sync.RWMutex{},
+		rooms:    make(map[string]*WebRTCRoom),
+		roomsMux: sync.RWMutex{},
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
 				return true // 允许所有来源，生产环境应当限制
@@ -28,148 +44,179 @@ func NewWebRTCService() *WebRTCService {
 	}
 }
 
-// HandleWebSocket 处理WebSocket连接
+type WebRTCMessage struct {
+	Type    string      `json:"type"`
+	From    string      `json:"from"`
+	To      string      `json:"to"`
+	Payload interface{} `json:"payload"`
+}
+
+// HandleWebSocket 处理WebRTC信令WebSocket连接
 func (ws *WebRTCService) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	conn, err := ws.upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("WebSocket升级失败: %v", err)
+		log.Printf("WebRTC WebSocket升级失败: %v", err)
 		return
 	}
 	defer conn.Close()
 
-	// 为客户端生成唯一ID
-	clientID := ws.generateClientID()
+	// 获取房间码和角色
+	code := r.URL.Query().Get("code")
+	role := r.URL.Query().Get("role")
 
-	// 添加客户端到连接池
-	ws.clientsMux.Lock()
-	ws.clients[clientID] = conn
-	ws.clientsMux.Unlock()
+	if code == "" || (role != "sender" && role != "receiver") {
+		log.Printf("WebRTC连接参数无效: code=%s, role=%s", code, role)
+		return
+	}
+
+	// 生成客户端ID
+	clientID := ws.generateClientID()
+	client := &WebRTCClient{
+		ID:         clientID,
+		Role:       role,
+		Connection: conn,
+		Room:       code,
+	}
+
+	// 添加客户端到房间
+	ws.addClientToRoom(code, client)
+	log.Printf("WebRTC %s连接到房间: %s (客户端ID: %s)", role, code, clientID)
 
 	// 连接关闭时清理
 	defer func() {
-		ws.clientsMux.Lock()
-		delete(ws.clients, clientID)
-		ws.clientsMux.Unlock()
+		ws.removeClientFromRoom(code, clientID)
+		log.Printf("WebRTC客户端断开连接: %s (房间: %s)", clientID, code)
 	}()
-
-	// 发送欢迎消息
-	welcomeMsg := models.VideoMessage{
-		Type:    "welcome",
-		Payload: map[string]string{"clientId": clientID},
-	}
-	ws.sendMessage(conn, welcomeMsg)
 
 	// 处理消息
 	for {
-		var msg models.VideoMessage
+		var msg WebRTCMessage
 		err := conn.ReadJSON(&msg)
 		if err != nil {
-			log.Printf("读取WebSocket消息失败: %v", err)
+			log.Printf("读取WebRTC WebSocket消息失败: %v", err)
 			break
 		}
 
-		switch msg.Type {
-		case "offer":
-			ws.handleOffer(clientID, msg)
-		case "answer":
-			ws.handleAnswer(clientID, msg)
-		case "ice-candidate":
-			ws.handleICECandidate(clientID, msg)
-		case "join-room":
-			ws.handleJoinRoom(clientID, msg)
-		case "leave-room":
-			ws.handleLeaveRoom(clientID, msg)
-		default:
-			log.Printf("未知消息类型: %s", msg.Type)
+		msg.From = clientID
+		log.Printf("收到WebRTC信令: 类型=%s, 来自=%s, 房间=%s", msg.Type, clientID, code)
+
+		// 转发信令消息给对方
+		ws.forwardMessage(code, clientID, &msg)
+	}
+}
+
+// 添加客户端到房间
+func (ws *WebRTCService) addClientToRoom(code string, client *WebRTCClient) {
+	ws.roomsMux.Lock()
+	defer ws.roomsMux.Unlock()
+
+	room := ws.rooms[code]
+	if room == nil {
+		room = &WebRTCRoom{
+			Code:      code,
+			CreatedAt: time.Now(),
+		}
+		ws.rooms[code] = room
+	}
+
+	if client.Role == "sender" {
+		room.Sender = client
+	} else {
+		room.Receiver = client
+		// 如果接收方连接，且有保存的offer，立即发送给接收方
+		if room.LastOffer != nil {
+			log.Printf("向新连接的接收方发送保存的offer")
+			err := client.Connection.WriteJSON(room.LastOffer)
+			if err != nil {
+				log.Printf("发送保存的offer失败: %v", err)
+			}
 		}
 	}
 }
 
-// handleOffer 处理WebRTC Offer
-func (ws *WebRTCService) handleOffer(clientID string, msg models.VideoMessage) {
-	// 广播offer到其他客户端
-	ws.broadcastToOthers(clientID, msg)
+// 从房间移除客户端
+func (ws *WebRTCService) removeClientFromRoom(code string, clientID string) {
+	ws.roomsMux.Lock()
+	defer ws.roomsMux.Unlock()
+
+	room := ws.rooms[code]
+	if room == nil {
+		return
+	}
+
+	if room.Sender != nil && room.Sender.ID == clientID {
+		room.Sender = nil
+	}
+	if room.Receiver != nil && room.Receiver.ID == clientID {
+		room.Receiver = nil
+	}
+
+	// 如果房间为空，删除房间
+	if room.Sender == nil && room.Receiver == nil {
+		delete(ws.rooms, code)
+		log.Printf("清理WebRTC房间: %s", code)
+	}
 }
 
-// handleAnswer 处理WebRTC Answer
-func (ws *WebRTCService) handleAnswer(clientID string, msg models.VideoMessage) {
-	// 广播answer到其他客户端
-	ws.broadcastToOthers(clientID, msg)
-}
+// 转发信令消息
+func (ws *WebRTCService) forwardMessage(roomCode string, fromClientID string, msg *WebRTCMessage) {
+	ws.roomsMux.Lock()
+	defer ws.roomsMux.Unlock()
 
-// handleICECandidate 处理ICE candidate
-func (ws *WebRTCService) handleICECandidate(clientID string, msg models.VideoMessage) {
-	// 广播ICE candidate到其他客户端
-	ws.broadcastToOthers(clientID, msg)
-}
+	room := ws.rooms[roomCode]
+	if room == nil {
+		return
+	}
 
-// handleJoinRoom 处理加入房间
-func (ws *WebRTCService) handleJoinRoom(clientID string, msg models.VideoMessage) {
-	// TODO: 实现房间管理逻辑
-	log.Printf("客户端 %s 加入房间", clientID)
-}
+	// 如果是offer消息，保存起来
+	if msg.Type == "offer" {
+		room.LastOffer = msg
+		log.Printf("保存offer消息，等待接收方连接")
+	}
 
-// handleLeaveRoom 处理离开房间
-func (ws *WebRTCService) handleLeaveRoom(clientID string, msg models.VideoMessage) {
-	// TODO: 实现房间管理逻辑
-	log.Printf("客户端 %s 离开房间", clientID)
-}
+	var targetClient *WebRTCClient
+	if room.Sender != nil && room.Sender.ID == fromClientID {
+		// 消息来自sender，转发给receiver
+		targetClient = room.Receiver
+	} else if room.Receiver != nil && room.Receiver.ID == fromClientID {
+		// 消息来自receiver，转发给sender
+		targetClient = room.Sender
+	}
 
-// broadcastToOthers 向其他客户端广播消息
-func (ws *WebRTCService) broadcastToOthers(senderID string, msg models.VideoMessage) {
-	ws.clientsMux.RLock()
-	defer ws.clientsMux.RUnlock()
-
-	for clientID, conn := range ws.clients {
-		if clientID != senderID {
-			ws.sendMessage(conn, msg)
+	if targetClient != nil && targetClient.Connection != nil {
+		msg.To = targetClient.ID
+		err := targetClient.Connection.WriteJSON(msg)
+		if err != nil {
+			log.Printf("转发WebRTC信令失败: %v", err)
+		} else {
+			log.Printf("转发WebRTC信令: 类型=%s, 从=%s到=%s", msg.Type, fromClientID, targetClient.ID)
 		}
+	} else {
+		log.Printf("目标客户端不在线，消息类型=%s", msg.Type)
 	}
 }
 
-// sendMessage 发送消息到WebSocket连接
-func (ws *WebRTCService) sendMessage(conn *websocket.Conn, msg models.VideoMessage) {
-	if err := conn.WriteJSON(msg); err != nil {
-		log.Printf("发送WebSocket消息失败: %v", err)
-	}
-}
-
-// generateClientID 生成客户端ID
+// 生成客户端ID
 func (ws *WebRTCService) generateClientID() string {
-	// 简单的ID生成，生产环境应使用更安全的方法
-	return "client_" + randomString(8)
+	return fmt.Sprintf("webrtc_client_%d", rand.Int63())
 }
 
-// CreateOffer 创建WebRTC Offer
-func (ws *WebRTCService) CreateOffer() (*models.WebRTCOffer, error) {
-	// TODO: 实现WebRTC Offer创建
-	return &models.WebRTCOffer{
-		SDP:  "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\n...", // 示例SDP
-		Type: "offer",
-	}, nil
-}
+// 获取房间状态
+func (ws *WebRTCService) GetRoomStatus(code string) map[string]interface{} {
+	ws.roomsMux.RLock()
+	defer ws.roomsMux.RUnlock()
 
-// CreateAnswer 创建WebRTC Answer
-func (ws *WebRTCService) CreateAnswer(offer *models.WebRTCOffer) (*models.WebRTCAnswer, error) {
-	// TODO: 实现WebRTC Answer创建
-	return &models.WebRTCAnswer{
-		SDP:  "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\n...", // 示例SDP
-		Type: "answer",
-	}, nil
-}
-
-// AddICECandidate 添加ICE候选
-func (ws *WebRTCService) AddICECandidate(candidate *models.WebRTCICECandidate) error {
-	// TODO: 实现ICE候选处理
-	return nil
-}
-
-// randomString 生成随机字符串
-func randomString(length int) string {
-	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	b := make([]byte, length)
-	for i := range b {
-		b[i] = charset[i%len(charset)]
+	room := ws.rooms[code]
+	if room == nil {
+		return map[string]interface{}{
+			"exists": false,
+		}
 	}
-	return string(b)
+
+	return map[string]interface{}{
+		"exists":          true,
+		"sender_online":   room.Sender != nil,
+		"receiver_online": room.Receiver != nil,
+		"created_at":      room.CreatedAt,
+	}
 }

@@ -71,13 +71,9 @@ func (h *placeholderHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
         
         <h2>📋 可用的 API 接口</h2>
         <div class="api-list">
-            <div class="api-item"><strong>POST</strong> /api/create-room - 创建文件传输房间</div>
-            <div class="api-item"><strong>GET</strong> /api/room-info - 获取房间信息</div>
-            <div class="api-item"><strong>GET</strong> /api/room-status - 获取房间状态</div>
-            <div class="api-item"><strong>POST</strong> /api/update-room-files - 更新房间文件</div>
             <div class="api-item"><strong>POST</strong> /api/create-text-room - 创建文本传输房间</div>
             <div class="api-item"><strong>GET</strong> /api/get-text-content/* - 获取文本内容</div>
-            <div class="api-item"><strong>WebSocket</strong> /ws/p2p - P2P 连接</div>
+            <div class="api-item"><strong>WebSocket</strong> /ws/webrtc - WebRTC 信令连接</div>
         </div>
         
         <h2>🛠️ 构建前端</h2>

@@ -28,7 +28,7 @@ const getCurrentBaseUrl = () => {
 const getCurrentWsUrl = () => {
   if (typeof window !== 'undefined') {
     // 在开发模式下，始终使用后端的WebSocket地址
-    if (window.location.hostname === 'localhost' && window.location.port === '3000') {
+    if (window.location.hostname === 'localhost' && (window.location.port === '3000' || window.location.port === '3001')) {
       return 'ws://localhost:8080/ws/p2p';
     }
     // 在生产模式下，使用当前域名

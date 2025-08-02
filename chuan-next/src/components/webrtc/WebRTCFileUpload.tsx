@@ -1,23 +1,17 @@
 "use client";
 
-import { useState, useCallback, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { toast } from '@/hooks/use-toast';
 import { Upload, FileText, Image, Video, Music, Archive, X } from 'lucide-react';
 
-interface FileUploadProps {
-  selectedFiles: File[];
-  onFilesChange: (files: File[]) => void;
-  onGenerateCode: () => void;
-  pickupCode?: string;
-  pickupLink?: string;
-  onCopyCode?: () => void;
-  onCopyLink?: () => void;
-  onAddMoreFiles?: () => void;
-  onRemoveFile?: (updatedFiles: File[]) => void;
-  onClearFiles?: () => void;
-  onReset?: () => void;
-  disabled?: boolean;
+interface FileInfo {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  status: 'ready' | 'downloading' | 'completed';
+  progress: number;
 }
 
 const getFileIcon = (mimeType: string) => {
@@ -36,7 +30,24 @@ const formatFileSize = (bytes: number): string => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
 
-export default function FileUpload({
+interface WebRTCFileUploadProps {
+  selectedFiles: File[];
+  onFilesChange: (files: File[]) => void;
+  onGenerateCode: () => void;
+  pickupCode?: string;
+  pickupLink?: string;
+  onCopyCode?: () => void;
+  onCopyLink?: () => void;
+  onAddMoreFiles?: () => void;
+  onRemoveFile?: (updatedFiles: File[]) => void;
+  onClearFiles?: () => void;
+  onReset?: () => void;
+  disabled?: boolean;
+  isConnected?: boolean;
+  isWebSocketConnected?: boolean;
+}
+
+export function WebRTCFileUpload({
   selectedFiles,
   onFilesChange,
   onGenerateCode,
@@ -48,8 +59,10 @@ export default function FileUpload({
   onRemoveFile,
   onClearFiles,
   onReset,
-  disabled = false
-}: FileUploadProps) {
+  disabled = false,
+  isConnected = false,
+  isWebSocketConnected = false
+}: WebRTCFileUploadProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -99,12 +112,41 @@ export default function FileUpload({
   if (selectedFiles.length === 0 && !pickupCode) {
     return (
       <div className="space-y-6">
-        <div className="text-center">
-          <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-2xl flex items-center justify-center animate-float">
-            <Upload className="w-8 h-8 text-white" />
+        {/* 功能标题和状态 */}
+        <div className="flex items-center">
+          <div className="flex items-center space-x-3 flex-1">
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-xl flex items-center justify-center">
+              <Upload className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-slate-800">选择文件</h2>
+              <p className="text-sm text-slate-600">拖拽文件到下方区域或点击选择文件</p>
+            </div>
           </div>
-          <h2 className="text-2xl font-semibold text-slate-800 mb-2">选择文件</h2>
-          <p className="text-slate-600">拖拽文件到下方区域或点击选择文件</p>
+          
+          {/* 竖线分割 */}
+          <div className="w-px h-12 bg-slate-200 mx-4"></div>
+          
+          {/* 状态显示 */}
+          <div className="text-right">
+            <div className="text-sm text-slate-500 mb-1">连接状态</div>
+            <div className="flex items-center justify-end space-x-3 text-sm">
+              {/* WebSocket状态 */}
+              <div className="flex items-center space-x-1">
+                <div className="w-2 h-2 rounded-full bg-slate-400"></div>
+                <span className="text-slate-600">WS</span>
+              </div>
+              
+              {/* 分隔符 */}
+              <div className="text-slate-300">|</div>
+              
+              {/* WebRTC状态 */}
+              <div className="flex items-center space-x-1">
+                <div className="w-2 h-2 rounded-full bg-slate-400"></div>
+                <span className="text-slate-600">RTC</span>
+              </div>
+            </div>
+          </div>
         </div>
         
         <div
@@ -130,7 +172,7 @@ export default function FileUpload({
                 或者 <span className="text-blue-600 font-medium underline">点击选择文件</span>
               </p>
               <p className="text-xs sm:text-sm text-slate-400 mt-4">
-                支持多个文件同时上传，无大小限制
+                支持多个文件同时上传，WebRTC点对点传输
               </p>
             </div>
           </div>
@@ -150,15 +192,63 @@ export default function FileUpload({
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* 文件列表 */}
-      <div className="glass-card rounded-2xl p-4 sm:p-6 animate-fade-in-up">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-6 gap-4">
-          <div className="flex items-center space-x-3">
+      <div>
+        {/* 功能标题和状态 */}
+        <div className="flex items-center mb-4 sm:mb-6">
+          <div className="flex items-center space-x-3 flex-1">
             <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-xl flex items-center justify-center">
               <FileText className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h3 className="text-lg sm:text-xl font-semibold text-slate-800">已选择文件</h3>
-              <p className="text-slate-500 text-sm">{selectedFiles.length} 个文件准备传输</p>
+              <h3 className="text-lg font-semibold text-slate-800">已选择文件</h3>
+              <p className="text-sm text-slate-500">{selectedFiles.length} 个文件准备传输</p>
+            </div>
+          </div>
+          
+          {/* 竖线分割 */}
+          <div className="w-px h-12 bg-slate-200 mx-4"></div>
+          
+          {/* 状态显示 */}
+          <div className="text-right">
+            <div className="text-sm text-slate-500 mb-1">连接状态</div>
+            <div className="flex items-center justify-end space-x-3 text-sm">
+              {/* WebSocket状态 */}
+              <div className="flex items-center space-x-1">
+                {isWebSocketConnected ? (
+                  <>
+                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                    <span className="text-emerald-600">WS</span>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-2 h-2 rounded-full bg-slate-400"></div>
+                    <span className="text-slate-600">WS</span>
+                  </>
+                )}
+              </div>
+              
+              {/* 分隔符 */}
+              <div className="text-slate-300">|</div>
+              
+              {/* WebRTC状态 */}
+              <div className="flex items-center space-x-1">
+                {isConnected ? (
+                  <>
+                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                    <span className="text-emerald-600">RTC</span>
+                  </>
+                ) : pickupCode ? (
+                  <>
+                    <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></div>
+                    <span className="text-orange-600">RTC</span>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-2 h-2 rounded-full bg-slate-400"></div>
+                    <span className="text-slate-600">RTC</span>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -259,7 +349,7 @@ export default function FileUpload({
 
       {/* 取件码展示 */}
       {pickupCode && (
-        <div className="glass-card rounded-2xl p-4 sm:p-6 md:p-8 animate-fade-in-up">
+        <div className="border-t border-slate-200 pt-6">
           <div className="text-center mb-4 sm:mb-6">
             <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-4 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-2xl flex items-center justify-center animate-float">
               <FileText className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
