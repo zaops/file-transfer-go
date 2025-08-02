@@ -35,7 +35,8 @@ export default function TextTransfer({
   const [isLoading, setIsLoading] = useState(false);
   const [isRoomCreated, setIsRoomCreated] = useState(false);
   const [connectedUsers, setConnectedUsers] = useState(0);
-  const [images, setImages] = useState<string[]>([]);
+  const [sentImages, setSentImages] = useState<string[]>([]); // 发送的图片
+  const [receivedImages, setReceivedImages] = useState<string[]>([]); // 接收的图片
   const [imagePreview, setImagePreview] = useState<string | null>(null); // 图片预览状态
   const [previewImage, setPreviewImage] = useState<string | null>(null); // 图片预览弹窗状态
   const [hasShownJoinSuccess, setHasShownJoinSuccess] = useState(false); // 防止重复显示加入成功消息
@@ -112,8 +113,15 @@ export default function TextTransfer({
         case 'image-send':
           // 接收到发送的图片
           if (message.payload?.imageData) {
-            setImages(prev => [...prev, message.payload.imageData]);
-            showToast('收到新的图片！', 'success');
+            console.log('接收到图片数据:', message.payload.imageData.substring(0, 100) + '...');
+            // 验证图片数据格式
+            if (message.payload.imageData.startsWith('data:image/')) {
+              setReceivedImages(prev => [...prev, message.payload.imageData]);
+              showToast('收到新的图片！', 'success');
+            } else {
+              console.error('无效的图片数据格式:', message.payload.imageData.substring(0, 50));
+              showToast('收到的图片格式不正确', 'error');
+            }
           }
           break;
         
@@ -335,6 +343,7 @@ export default function TextTransfer({
           
           // 转为base64，质量为0.8
           const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+          console.log('图片压缩完成，数据长度:', compressedDataUrl.length, '前100字符:', compressedDataUrl.substring(0, 100));
           resolve(compressedDataUrl);
         } catch (error) {
           reject(new Error('图片压缩失败: ' + error));
@@ -370,7 +379,7 @@ export default function TextTransfer({
           try {
             showToast('正在处理图片...', 'info');
             const compressedImageData = await compressImage(file);
-            setImages(prev => [...prev, compressedImageData]);
+            setSentImages(prev => [...prev, compressedImageData]);
             
             // 发送图片给其他用户
             if (websocket && isConnected) {
@@ -442,8 +451,12 @@ export default function TextTransfer({
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    const index = images.indexOf(src);
-                    downloadImage(src, index);
+                    // 尝试在发送和接收的图片中查找
+                    let index = sentImages.indexOf(src);
+                    if (index === -1) {
+                      index = receivedImages.indexOf(src);
+                    }
+                    downloadImage(src, index >= 0 ? index : 0);
                   }}
                   className="bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white p-2 rounded-lg shadow-lg transition-all hover:scale-105"
                   title="下载图片"
@@ -619,15 +632,15 @@ export default function TextTransfer({
               </div>
             )}
 
-            {/* 图片展示区域 */}
-            {images.length > 0 && (
+            {/* 发送方显示已发送的图片 */}
+            {mode === 'send' && sentImages.length > 0 && (
               <div className="mt-6">
                 <h3 className="text-lg font-medium text-slate-800 mb-3 flex items-center">
                   <Image className="w-5 h-5 mr-2" />
-                  已发送的图片 ({images.length})
+                  已发送的图片 ({sentImages.length})
                 </h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {images.map((img, index) => (
+                  {sentImages.map((img, index) => (
                     <div key={index} className="relative group overflow-hidden">
                       <img 
                         src={img} 
@@ -770,21 +783,32 @@ export default function TextTransfer({
               </div>
             )}
 
-            {/* 接收到的图片展示 */}
-            {images.length > 0 && (
+            {/* 接收方显示接收到的图片 */}
+            {mode === 'receive' && receivedImages.length > 0 && (
               <div className="mt-6">
                 <h3 className="text-lg font-medium text-slate-800 mb-3 flex items-center">
                   <Image className="w-5 h-5 mr-2" />
-                  接收到的图片 ({images.length})
+                  接收到的图片 ({receivedImages.length})
                 </h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {images.map((img, index) => (
+                  {receivedImages.map((img, index) => (
                     <div key={index} className="relative group overflow-hidden">
                       <img 
                         src={img} 
                         alt={`图片 ${index + 1}`}
                         className="w-full h-24 object-cover rounded-lg border-2 border-slate-200 hover:border-emerald-400 transition-all duration-200 cursor-pointer bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50"
                         onClick={() => setPreviewImage(img)}
+                        onLoad={(e) => {
+                          console.log(`图片 ${index + 1} 加载成功`);
+                        }}
+                        onError={(e) => {
+                          console.error(`图片 ${index + 1} 加载失败:`, img.substring(0, 100));
+                          e.currentTarget.style.backgroundColor = '#f1f5f9';
+                          e.currentTarget.style.display = 'flex';
+                          e.currentTarget.style.alignItems = 'center';
+                          e.currentTarget.style.justifyContent = 'center';
+                          e.currentTarget.innerHTML = `<span style="color: #64748b; font-size: 12px;">图片加载失败</span>`;
+                        }}
                       />
                       <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-opacity rounded-lg"></div>
                       

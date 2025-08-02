@@ -250,28 +250,42 @@ build_frontend() {
     print_verbose "执行 SSG 构建..."
     
     # 临时移除 API 目录
+    api_backup_name=""
     if [ -d "src/app/api" ]; then
-        mv src/app/api /tmp/next-api-backup-$(date +%s) 2>/dev/null || true
+        api_backup_name="next-api-backup-$(date +%s)-$$"
+        mv src/app/api "/tmp/$api_backup_name" 2>/dev/null || true
+        print_verbose "API 目录已备份到: /tmp/$api_backup_name"
     fi
     
     # 构建
+    build_success=true
     if [ "$VERBOSE" = true ]; then
-        NEXT_EXPORT=true yarn build
+        NEXT_EXPORT=true yarn build || build_success=false
     else
-        NEXT_EXPORT=true yarn build > build.log 2>&1
-        if [ $? -ne 0 ]; then
+        NEXT_EXPORT=true yarn build > build.log 2>&1 || build_success=false
+        if [ "$build_success" = false ]; then
             print_error "前端构建失败，查看 $FRONTEND_DIR/build.log"
             cat build.log
+            # 恢复 API 目录后再退出
+            if [ -n "$api_backup_name" ] && [ -d "/tmp/$api_backup_name" ]; then
+                mv "/tmp/$api_backup_name" src/app/api 2>/dev/null || true
+                print_verbose "已恢复 API 目录"
+            fi
             exit 1
         fi
         rm -f build.log
     fi
     
     # 恢复 API 目录
-    api_backup=$(ls /tmp/next-api-backup-* 2>/dev/null | head -1)
-    if [ -n "$api_backup" ]; then
-        mv "$api_backup" src/app/api 2>/dev/null || true
+    if [ -n "$api_backup_name" ] && [ -d "/tmp/$api_backup_name" ]; then
+        mv "/tmp/$api_backup_name" src/app/api 2>/dev/null || true
+        print_verbose "已恢复 API 目录"
+    elif [ -n "$api_backup_name" ]; then
+        print_warning "API 目录备份丢失，无法恢复: /tmp/$api_backup_name"
     fi
+    
+    # 清理历史备份文件（保留最近1小时的）
+    find /tmp -name "next-api-backup-*" -mmin +60 -exec rm -rf {} \; 2>/dev/null || true
     
     cd "$PROJECT_ROOT"
     
@@ -483,11 +497,22 @@ show_summary() {
 error_cleanup() {
     print_error "构建过程中发生错误"
     
-    # 尝试恢复 API 目录
-    api_backup=$(ls /tmp/next-api-backup-* 2>/dev/null | head -1)
-    if [ -n "$api_backup" ] && [ -d "$FRONTEND_DIR" ]; then
-        mv "$api_backup" "$FRONTEND_DIR/src/app/api" 2>/dev/null || true
-        print_verbose "已恢复 API 目录"
+    # 尝试恢复 API 目录 - 查找所有可能的备份
+    local current_process_backups=$(ls /tmp/next-api-backup-*-$$ 2>/dev/null || true)
+    local other_backups=$(ls /tmp/next-api-backup-* 2>/dev/null | grep -v "\-$$" | head -1 || true)
+    
+    # 优先恢复当前进程的备份
+    if [ -n "$current_process_backups" ]; then
+        for backup in $current_process_backups; do
+            if [ -d "$backup" ] && [ -d "$FRONTEND_DIR" ]; then
+                mv "$backup" "$FRONTEND_DIR/src/app/api" 2>/dev/null || true
+                print_verbose "已恢复 API 目录: $backup"
+                break
+            fi
+        done
+    elif [ -n "$other_backups" ] && [ -d "$FRONTEND_DIR" ]; then
+        mv "$other_backups" "$FRONTEND_DIR/src/app/api" 2>/dev/null || true
+        print_verbose "已恢复 API 目录: $other_backups"
     fi
     
     exit 1
