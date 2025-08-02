@@ -38,7 +38,7 @@ export function useWebSocket(): UseWebSocketReturn {
 
     // 连接到Go后端的WebSocket - 使用配置文件中的URL
     const baseWsUrl = getWebSocketUrl();
-    const wsUrl = `${baseWsUrl}/p2p?code=${code}&role=${role}`;
+    const wsUrl = `${baseWsUrl}?code=${code}&role=${role}`;
     
     console.log('连接WebSocket:', wsUrl);
     
@@ -48,6 +48,12 @@ export function useWebSocket(): UseWebSocketReturn {
       console.log('WebSocket连接已建立');
       setIsConnected(true);
       setWebsocket(ws);
+      
+      // 发送连接建立确认事件
+      const connectEvent = new CustomEvent('websocket-connected', {
+        detail: { code, role }
+      });
+      window.dispatchEvent(connectEvent);
       
       // 发送初始连接信息
       const message = {
@@ -98,10 +104,13 @@ export function useWebSocket(): UseWebSocketReturn {
 
     ws.onerror = (error) => {
       console.error('WebSocket错误:', error);
+      console.error('WebSocket状态:', ws.readyState);
+      console.error('WebSocket URL:', wsUrl);
+      setIsConnected(false);
       
       // 发送连接错误事件
       const errorEvent = new CustomEvent('websocket-error', {
-        detail: { error }
+        detail: { error, url: wsUrl, readyState: ws.readyState }
       });
       window.dispatchEvent(errorEvent);
     };

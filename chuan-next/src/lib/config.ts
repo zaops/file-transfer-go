@@ -27,11 +27,16 @@ const getCurrentBaseUrl = () => {
 // 动态获取 WebSocket URL
 const getCurrentWsUrl = () => {
   if (typeof window !== 'undefined') {
+    // 在开发模式下，始终使用后端的WebSocket地址
+    if (window.location.hostname === 'localhost' && window.location.port === '3000') {
+      return 'ws://localhost:8080/ws/p2p';
+    }
+    // 在生产模式下，使用当前域名
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${protocol}//${window.location.host}/ws`;
+    return `${protocol}//${window.location.host}/ws/p2p`;
   }
   // 服务器端默认值
-  return 'ws://localhost:8080/ws';
+  return 'ws://localhost:8080/ws/p2p';
 };
 
 export const config = {
