@@ -36,6 +36,7 @@ export const WebRTCFileTransfer: React.FC = () => {
   // 房间状态
   const [pickupCode, setPickupCode] = useState('');
   const [mode, setMode] = useState<'send' | 'receive'>('send');
+  const [hasProcessedInitialUrl, setHasProcessedInitialUrl] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const {
@@ -54,27 +55,43 @@ export const WebRTCFileTransfer: React.FC = () => {
     onFileProgress
   } = useWebRTCTransfer();
 
-  // 从URL参数中获取初始模式
+  // 从URL参数中获取初始模式（仅在首次加载时处理）
   useEffect(() => {
     const urlMode = searchParams.get('mode') as 'send' | 'receive';
     const type = searchParams.get('type');
     const code = searchParams.get('code');
     
-    if (type === 'webrtc' && urlMode && ['send', 'receive'].includes(urlMode)) {
+    // 只在首次加载且URL中有webrtc类型时处理
+    if (!hasProcessedInitialUrl && type === 'webrtc' && urlMode && ['send', 'receive'].includes(urlMode)) {
+      console.log('=== 处理初始URL参数 ===');
+      console.log('URL模式:', urlMode, '类型:', type, '取件码:', code);
+      
       setMode(urlMode);
+      setHasProcessedInitialUrl(true);
+      
       if (code && urlMode === 'receive') {
-        // 自动加入房间
+        // 自动加入房间，使用房间状态检查
+        console.log('URL中有取件码，自动加入房间');
         joinRoom(code);
       }
     }
-  }, [searchParams]);
+  }, [searchParams, hasProcessedInitialUrl]);
 
   // 更新URL参数
   const updateMode = useCallback((newMode: 'send' | 'receive') => {
+    console.log('=== 手动切换模式 ===');
+    console.log('新模式:', newMode);
+    
     setMode(newMode);
     const params = new URLSearchParams(searchParams.toString());
     params.set('type', 'webrtc');
     params.set('mode', newMode);
+    
+    // 如果切换到发送模式，移除code参数
+    if (newMode === 'send') {
+      params.delete('code');
+    }
+    
     router.push(`?${params.toString()}`, { scroll: false });
   }, [searchParams, router]);
 
@@ -164,14 +181,46 @@ export const WebRTCFileTransfer: React.FC = () => {
   };
 
   // 加入房间 (接收模式)
-  const joinRoom = (code: string) => {
+  const joinRoom = async (code: string) => {
     console.log('=== 加入房间 ===');
     console.log('取件码:', code);
     
-    setPickupCode(code.trim());
-    connect(code.trim(), 'receiver');
+    const trimmedCode = code.trim();
     
-    showToast(`正在连接到房间: ${code}`, "info");
+    // 检查取件码格式
+    if (!trimmedCode || trimmedCode.length !== 6) {
+      showToast('请输入正确的6位取件码', "error");
+      return;
+    }
+    
+    try {
+      // 先检查房间状态
+      console.log('检查房间状态...');
+      showToast('正在检查房间状态...', "info");
+      
+      const response = await fetch(`/api/webrtc-room-status?code=${trimmedCode}`);
+      const result = await response.json();
+      
+      if (!result.success) {
+        showToast(result.message || '房间不存在或已过期', "error");
+        return;
+      }
+      
+      // 检查发送方是否在线
+      if (!result.sender_online) {
+        showToast('发送方不在线，请确认取件码是否正确', "error");
+        return;
+      }
+      
+      console.log('房间状态检查通过，开始连接...');
+      setPickupCode(trimmedCode);
+      connect(trimmedCode, 'receiver');
+      
+      showToast(`正在连接到房间: ${trimmedCode}`, "info");
+    } catch (error) {
+      console.error('检查房间状态失败:', error);
+      showToast('检查房间状态失败，请重试', "error");
+    }
   };
 
   // 重置连接状态 (用于连接失败后重新输入)

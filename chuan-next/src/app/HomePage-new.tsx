@@ -1,6 +1,7 @@
 "use client";
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Upload, MessageSquare, Monitor, Github, ExternalLink } from 'lucide-react';
 import Hero from '@/components/Hero';
@@ -10,6 +11,21 @@ import { WebRTCFileTransfer } from '@/components/WebRTCFileTransfer';
 import { Button } from '@/components/ui/button';
 
 export default function HomePage() {
+  const searchParams = useSearchParams();
+  const [activeTab, setActiveTab] = useState('webrtc');
+  const [hasInitialized, setHasInitialized] = useState(false);
+  
+  // 根据URL参数设置初始标签（仅首次加载时）
+  useEffect(() => {
+    if (!hasInitialized) {
+      const urlType = searchParams.get('type');
+      if (urlType && ['webrtc', 'text', 'desktop'].includes(urlType)) {
+        setActiveTab(urlType);
+      }
+      setHasInitialized(true);
+    }
+  }, [searchParams, hasInitialized]);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
       <div className="container mx-auto px-4 py-4 sm:py-6 md:py-8">
@@ -20,7 +36,7 @@ export default function HomePage() {
 
         {/* Main Content */}
         <div className="max-w-4xl mx-auto">
-          <Tabs defaultValue="webrtc" className="w-full">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             {/* Tabs Navigation - 横向布局 */}
             <div className="mb-6">
               <TabsList className="grid w-full grid-cols-3 max-w-lg mx-auto h-auto bg-white/90 backdrop-blur-sm shadow-lg rounded-xl p-2 border border-slate-200">

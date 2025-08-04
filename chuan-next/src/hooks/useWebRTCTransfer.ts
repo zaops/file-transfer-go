@@ -20,9 +20,9 @@ export function useWebRTCTransfer() {
 
   // 设置数据通道消息处理
   useEffect(() => {
-    const dataChannel = connection.getDataChannel();
+    const dataChannel = connection.localDataChannel || connection.remoteDataChannel;
     if (dataChannel && dataChannel.readyState === 'open') {
-      console.log('设置数据通道消息处理器');
+      console.log('设置数据通道消息处理器, 通道类型:', connection.localDataChannel ? '本地' : '远程');
       
       // 扩展消息处理以包含文件列表
       const originalHandler = fileTransfer.handleMessage;
@@ -50,7 +50,7 @@ export function useWebRTCTransfer() {
         originalHandler(event);
       };
     }
-  }, [connection.isConnected, connection.getDataChannel, fileTransfer.handleMessage]);
+  }, [connection.localDataChannel, connection.remoteDataChannel, fileTransfer.handleMessage]);
 
   // 发送文件
   const sendFile = useCallback((file: File, fileId?: string) => {

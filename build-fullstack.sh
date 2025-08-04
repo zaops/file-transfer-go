@@ -148,7 +148,7 @@ build_frontend() {
     
     # 构建
     print_verbose "执行 SSG 构建..."
-    if ! NEXT_EXPORT=true yarn build > build.log 2>&1; then
+    if ! NEXT_EXPORT=true NODE_ENV=production NEXT_PUBLIC_BACKEND_URL= NEXT_PUBLIC_WS_URL= NEXT_PUBLIC_API_BASE_URL= yarn build > build.log 2>&1; then
         print_error "前端构建失败，查看 $FRONTEND_DIR/build.log"
         cat build.log
         # 恢复 API 目录后再退出

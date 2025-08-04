@@ -27,7 +27,9 @@ export const apiRoutes = [
 
 // 客户端API配置（用于静态导出时的客户端请求）
 export const clientApiConfig = {
-  // 直接连接到 Go 后端
-  baseUrl: 'http://localhost:8080', // 构建时可通过环境变量替换
-  wsUrl: 'ws://localhost:8080/ws',   // 构建时可通过环境变量替换
+  // 直接连接到 Go 后端 - 动态获取当前域名
+  baseUrl: typeof window !== 'undefined' ? window.location.origin : '',
+  wsUrl: typeof window !== 'undefined' 
+    ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws` 
+    : '',
 }

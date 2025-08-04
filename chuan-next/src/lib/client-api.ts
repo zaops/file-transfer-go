@@ -3,7 +3,7 @@
  * 用于在静态导出模式下直接与 Go 后端通信
  */
 
-import { config, getApiUrl, getDirectBackendUrl } from './config';
+import { config } from './config';
 
 interface ApiResponse {
   success: boolean;

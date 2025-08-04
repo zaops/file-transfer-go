@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -19,6 +21,19 @@ import (
 )
 
 func main() {
+	// 定义命令行参数
+	var port = flag.Int("port", 8080, "服务器监听端口")
+	var help = flag.Bool("help", false, "显示帮助信息")
+	flag.Parse()
+
+	// 显示帮助信息
+	if *help {
+		fmt.Println("文件传输服务器")
+		fmt.Println("用法:")
+		flag.PrintDefaults()
+		os.Exit(0)
+	}
+
 	// 初始化服务
 	p2pService := services.NewP2PService()
 
@@ -62,9 +77,15 @@ func main() {
 	r.Post("/api/create-room", h.CreateRoomHandler)
 	r.Get("/api/room-info", h.RoomInfoHandler)
 
+	// WebRTC API路由
+	r.Get("/api/webrtc-room-status", h.WebRTCRoomStatusHandler)
+
+	// 构建服务器地址
+	addr := fmt.Sprintf(":%d", *port)
+
 	// 启动服务器
 	srv := &http.Server{
-		Addr:         ":8080",
+		Addr:         addr,
 		Handler:      r,
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
@@ -73,7 +94,7 @@ func main() {
 
 	// 优雅关闭
 	go func() {
-		log.Printf("服务器启动在端口 :8080")
+		log.Printf("服务器启动在端口 %s", addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("服务器启动失败: %v", err)
 		}

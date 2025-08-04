@@ -279,3 +279,52 @@ func (h *Handler) RoomInfoHandler(w http.ResponseWriter, r *http.Request) {
 
 	json.NewEncoder(w).Encode(response)
 }
+
+// WebRTCRoomStatusHandler 获取WebRTC房间状态API
+func (h *Handler) WebRTCRoomStatusHandler(w http.ResponseWriter, r *http.Request) {
+	// 设置响应为JSON格式
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"message": "方法不允许",
+		})
+		return
+	}
+
+	code := r.URL.Query().Get("code")
+	if code == "" || len(code) != 6 {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"message": "请提供正确的6位房间码",
+		})
+		return
+	}
+
+	// 获取WebRTC房间状态
+	status := h.webrtcService.GetRoomStatus(code)
+
+	if !status["exists"].(bool) {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"message": "房间不存在",
+		})
+		return
+	}
+
+	// 构建响应
+	response := map[string]interface{}{
+		"success":         true,
+		"message":         "房间状态获取成功",
+		"exists":          status["exists"],
+		"sender_online":   status["sender_online"],
+		"receiver_online": status["receiver_online"],
+		"created_at":      status["created_at"],
+	}
+
+	json.NewEncoder(w).Encode(response)
+}

@@ -53,6 +53,8 @@ type WebRTCMessage struct {
 
 // HandleWebSocket 处理WebRTC信令WebSocket连接
 func (ws *WebRTCService) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
+	log.Printf("收到WebRTC WebSocket连接请求: %s", r.URL.String())
+
 	conn, err := ws.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("WebRTC WebSocket升级失败: %v", err)
@@ -63,6 +65,8 @@ func (ws *WebRTCService) HandleWebSocket(w http.ResponseWriter, r *http.Request)
 	// 获取房间码和角色
 	code := r.URL.Query().Get("code")
 	role := r.URL.Query().Get("role")
+
+	log.Printf("WebRTC连接参数: code=%s, role=%s", code, role)
 
 	if code == "" || (role != "sender" && role != "receiver") {
 		log.Printf("WebRTC连接参数无效: code=%s, role=%s", code, role)
@@ -78,6 +82,8 @@ func (ws *WebRTCService) HandleWebSocket(w http.ResponseWriter, r *http.Request)
 		Room:       code,
 	}
 
+	log.Printf("WebRTC客户端已创建: ID=%s, Role=%s, Room=%s", clientID, role, code)
+
 	// 添加客户端到房间
 	ws.addClientToRoom(code, client)
 	log.Printf("WebRTC %s连接到房间: %s (客户端ID: %s)", role, code, clientID)
@@ -86,6 +92,9 @@ func (ws *WebRTCService) HandleWebSocket(w http.ResponseWriter, r *http.Request)
 	defer func() {
 		ws.removeClientFromRoom(code, clientID)
 		log.Printf("WebRTC客户端断开连接: %s (房间: %s)", clientID, code)
+
+		// 通知房间内其他客户端对方已断开连接
+		ws.notifyRoomDisconnection(code, clientID, client.Role)
 	}()
 
 	// 处理消息
@@ -201,7 +210,45 @@ func (ws *WebRTCService) generateClientID() string {
 	return fmt.Sprintf("webrtc_client_%d", rand.Int63())
 }
 
-// 获取房间状态
+// 通知房间内客户端有人断开连接
+func (ws *WebRTCService) notifyRoomDisconnection(roomCode string, disconnectedClientID string, disconnectedRole string) {
+	ws.roomsMux.Lock()
+	defer ws.roomsMux.Unlock()
+
+	room := ws.rooms[roomCode]
+	if room == nil {
+		return
+	}
+
+	// 构建断开连接通知消息
+	disconnectionMsg := &WebRTCMessage{
+		Type: "disconnection",
+		From: disconnectedClientID,
+		Payload: map[string]interface{}{
+			"role":    disconnectedRole,
+			"message": "对方已停止传输",
+		},
+	}
+
+	// 通知房间内其他客户端
+	if room.Sender != nil && room.Sender.ID != disconnectedClientID {
+		err := room.Sender.Connection.WriteJSON(disconnectionMsg)
+		if err != nil {
+			log.Printf("通知发送方断开连接失败: %v", err)
+		} else {
+			log.Printf("已通知发送方: 对方已断开连接")
+		}
+	}
+
+	if room.Receiver != nil && room.Receiver.ID != disconnectedClientID {
+		err := room.Receiver.Connection.WriteJSON(disconnectionMsg)
+		if err != nil {
+			log.Printf("通知接收方断开连接失败: %v", err)
+		} else {
+			log.Printf("已通知接收方: 对方已断开连接")
+		}
+	}
+}
 func (ws *WebRTCService) GetRoomStatus(code string) map[string]interface{} {
 	ws.roomsMux.RLock()
 	defer ws.roomsMux.RUnlock()

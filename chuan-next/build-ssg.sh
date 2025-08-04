@@ -228,10 +228,10 @@ set_build_env() {
 NEXT_EXPORT=true
 NODE_ENV=production
 
-# 后端连接配置（用于静态模式）
-NEXT_PUBLIC_GO_BACKEND_URL=http://localhost:8080
-NEXT_PUBLIC_WS_URL=ws://localhost:8080/ws
-NEXT_PUBLIC_API_BASE_URL=http://localhost:8080
+# 后端连接配置（用于静态模式 - 使用相对路径）
+NEXT_PUBLIC_GO_BACKEND_URL=
+NEXT_PUBLIC_WS_URL=
+NEXT_PUBLIC_API_BASE_URL=
 EOF
     
     print_verbose "已创建 .env.ssg 文件"
@@ -252,9 +252,9 @@ run_static_build() {
     
     # 设置环境变量并执行构建
     if [ "$VERBOSE" = true ]; then
-        NEXT_EXPORT=true NODE_ENV=production NEXT_PUBLIC_BACKEND_URL=http://localhost:8080 yarn build
+        NEXT_EXPORT=true NODE_ENV=production NEXT_PUBLIC_BACKEND_URL= yarn build
     else
-        NEXT_EXPORT=true NODE_ENV=production NEXT_PUBLIC_BACKEND_URL=http://localhost:8080 yarn build > build.log 2>&1
+        NEXT_EXPORT=true NODE_ENV=production NEXT_PUBLIC_BACKEND_URL= yarn build > build.log 2>&1
         if [ $? -ne 0 ]; then
             print_error "构建失败，查看 build.log 获取详细信息"
             cat build.log

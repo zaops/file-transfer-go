@@ -1,5 +1,5 @@
-import { useState, useCallback, useRef } from 'react';
-import { FileInfo, TransferProgress } from '@/types';
+import { useState, useCallback } from 'react';
+import { TransferProgress } from '@/types';
 import { useToast } from '@/components/ui/toast-simple';
 
 interface FileTransferData {

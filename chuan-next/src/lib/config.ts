@@ -27,11 +27,16 @@ const getCurrentBaseUrl = () => {
 // 动态获取 WebSocket URL
 const getCurrentWsUrl = () => {
   if (typeof window !== 'undefined') {
-    // 在开发模式下，始终使用后端的WebSocket地址
-    if (window.location.hostname === 'localhost' && (window.location.port === '3000' || window.location.port === '3001')) {
+    // 检查是否是 Next.js 开发服务器（端口 3000 或 3001）
+    const isNextDevServer = window.location.hostname === 'localhost' && 
+                           (window.location.port === '3000' || window.location.port === '3001');
+    
+    if (isNextDevServer) {
+      // 开发模式：通过 Next.js 开发服务器访问，连接到后端 WebSocket
       return 'ws://localhost:8080/ws/p2p';
     }
-    // 在生产模式下，使用当前域名
+    
+    // 生产模式或通过 Go 服务器访问：使用当前域名和端口
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     return `${protocol}//${window.location.host}/ws/p2p`;
   }
