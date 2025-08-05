@@ -55,12 +55,10 @@ export function useWebRTCConnection() {
 
   const STUN_SERVERS = [
     // Edge 浏览器专用优化配置
+    { urls: 'stun:stun.miwifi.com' },
+    { urls: 'stun:stun.chat.bilibili.com' },
+    { urls: 'stun:turn.cloudflare.com:3478' },
     { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun3.l.google.com:19302' },
-    { urls: 'stun:stun4.l.google.com:19302' },
-    
     // 备用 STUN 服务器
     { urls: 'stun:stun.nextcloud.com:443' },
     { urls: 'stun:stun.sipgate.net:10000' },
@@ -69,7 +67,7 @@ export function useWebRTCConnection() {
 
   // 获取浏览器特定的 RTCConfiguration
   const getBrowserSpecificConfig = useCallback(() => {
-    const { isEdge, isSafari, isChromeFamily } = detectBrowser();
+    const { isSafari, isChromeFamily } = detectBrowser();
     
     const baseConfig = {
       iceServers: STUN_SERVERS,
