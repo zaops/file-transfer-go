@@ -7,6 +7,13 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const code = searchParams.get('code');
     
+    if (!code) {
+      return NextResponse.json(
+        { error: 'Missing code parameter' },
+        { status: 400 }
+      );
+    }
+
     console.log('API Route: Getting room info, proxying to:', `${GO_BACKEND_URL}/api/room-info?code=${code}`);
     
     const response = await fetch(`${GO_BACKEND_URL}/api/room-info?code=${code}`, {

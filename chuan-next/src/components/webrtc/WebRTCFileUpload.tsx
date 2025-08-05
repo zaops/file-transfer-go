@@ -4,6 +4,7 @@ import React, { useState, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast-simple';
 import { Upload, FileText, Image, Video, Music, Archive, X } from 'lucide-react';
+import QRCodeDisplay from '@/components/QRCodeDisplay';
 
 interface FileInfo {
   id: string;
@@ -398,62 +399,77 @@ export function WebRTCFileUpload({
       {/* 取件码展示 */}
       {pickupCode && (
         <div className="border-t border-slate-200 pt-6">
-          <div className="text-center mb-4 sm:mb-6">
-            <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-4 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-2xl flex items-center justify-center animate-float">
-              <FileText className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
-            </div>
-            <h3 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent mb-2">
-              取件码生成成功！
-            </h3>
-            <p className="text-sm sm:text-base text-slate-600">分享以下信息给接收方</p>
-          </div>
-
-          <div className="space-y-4 sm:space-y-6">
-            {/* 取件码 */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-3">取件码</label>
-              <div className="flex flex-col sm:flex-row gap-3">
-                <div className="flex-1 code-display rounded-xl p-4 sm:p-6 text-center">
-                  <div className="text-2xl sm:text-3xl font-bold font-mono bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent tracking-wider">
-                    {pickupCode}
-                  </div>
-                </div>
-                <Button
-                  onClick={onCopyCode}
-                  className="px-4 sm:px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-medium shadow-lg transition-all duration-200 hover:shadow-xl w-full sm:w-auto"
-                >
-                  复制
-                </Button>
+          {/* 左上角状态提示 - 类似已选择文件的风格 */}
+          <div className="flex items-center mb-6">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-xl flex items-center justify-center">
+                <FileText className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-slate-800">取件码生成成功！</h3>
+                <p className="text-sm text-slate-600">分享以下信息给接收方</p>
               </div>
             </div>
+          </div>
 
-            {/* 取件链接 */}
+          {/* 中间区域：取件码 + 分隔线 + 二维码 */}
+          <div className="flex flex-col lg:flex-row lg:items-start gap-6 lg:gap-8 mb-8">
+            {/* 左侧：取件码 */}
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-slate-700 mb-3">取件码</label>
+              <div className="flex flex-col items-center rounded-xl border border-slate-200 p-6 h-40 justify-center bg-slate-50">
+                <div className="text-2xl font-bold font-mono bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent tracking-wider">
+                  {pickupCode}
+                </div>
+              </div>
+              <Button
+                onClick={onCopyCode}
+                className="w-full px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg font-medium shadow transition-all duration-200 mt-3"
+              >
+                复制取件码
+              </Button>
+            </div>
+
+            {/* 分隔线 - 大屏幕显示竖线，移动端隐藏 */}
+            <div className="hidden lg:block w-px bg-slate-200 h-64 mt-6"></div>
+
+            {/* 右侧：二维码 */}
             {pickupLink && (
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-3">取件链接</label>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <div className="flex-1 code-display rounded-xl p-3 sm:p-4">
-                    <div className="text-xs sm:text-sm text-slate-700 break-all font-mono">
-                      {pickupLink}
-                    </div>
-                  </div>
-                  <Button
-                    onClick={onCopyLink}
-                    className="px-4 sm:px-6 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-medium shadow-lg transition-all duration-200 hover:shadow-xl w-full sm:w-auto"
-                  >
-                    复制
-                  </Button>
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-slate-700 mb-3">扫码传输</label>
+                <div className="flex flex-col items-center rounded-xl border border-slate-200 p-6 h-40 justify-center bg-slate-50">
+                  <QRCodeDisplay 
+                    value={pickupLink}
+                    size={120}
+                    title=""
+                    className="w-auto"
+                  />
+                </div>
+                <div className="w-full px-4 py-2.5 bg-blue-500 text-white rounded-lg font-medium shadow transition-all duration-200 mt-3 text-center">
+                  使用手机扫码快速访问
                 </div>
               </div>
             )}
           </div>
 
-          {/* 使用提示 */}
-          <div className="mt-4 sm:mt-6 p-3 sm:p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200">
-            <p className="text-xs sm:text-sm text-slate-600 text-center">
-              💡 <span className="font-medium">使用提示：</span>接收方输入取件码或访问取件链接即可下载文件
-            </p>
-          </div>
+          {/* 底部：取件链接 */}
+          {pickupLink && (
+            <div className="space-y-3">
+              <div className="flex gap-3">
+                <div className="flex-1 code-display rounded-lg p-3 bg-slate-50 border border-slate-200">
+                  <div className="text-sm text-slate-700 break-all font-mono leading-relaxed">
+                    {pickupLink}
+                  </div>
+                </div>
+                <Button
+                  onClick={onCopyLink}
+                  className="px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium shadow transition-all duration-200 shrink-0"
+                >
+                  复制链接
+                </Button>
+              </div>
+            </div>
+          )}          
         </div>
       )}
     </div>

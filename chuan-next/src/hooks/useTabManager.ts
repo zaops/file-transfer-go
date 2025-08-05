@@ -75,10 +75,10 @@ export const useTabManager = (isConnected: boolean, pickupCode: string, isConnec
         currentMode = '文件传输';
         break;
       case 'text':
-        currentMode = '文字传输';
+        currentMode = '文字传输（开发中）';
         break;
       case 'desktop':
-        currentMode = '桌面共享';
+        currentMode = '桌面共享（开发中）';
         break;
     }
     
@@ -87,10 +87,10 @@ export const useTabManager = (isConnected: boolean, pickupCode: string, isConnec
         targetMode = '文件传输';
         break;
       case 'text':
-        targetMode = '文字传输';
+        targetMode = '文字传输（开发中）';
         break;
       case 'desktop':
-        targetMode = '桌面共享';
+        targetMode = '桌面共享（开发中）';
         break;
     }
     
