@@ -22,6 +22,7 @@ type WebRTCRoom struct {
 	Sender    *WebRTCClient
 	Receiver  *WebRTCClient
 	CreatedAt time.Time
+	ExpiresAt time.Time      // 添加过期时间
 	LastOffer *WebRTCMessage // 保存最后的offer消息
 }
 
@@ -33,7 +34,7 @@ type WebRTCClient struct {
 }
 
 func NewWebRTCService() *WebRTCService {
-	return &WebRTCService{
+	service := &WebRTCService{
 		rooms:    make(map[string]*WebRTCRoom),
 		roomsMux: sync.RWMutex{},
 		upgrader: websocket.Upgrader{
@@ -42,6 +43,11 @@ func NewWebRTCService() *WebRTCService {
 			},
 		},
 	}
+
+	// 启动房间清理任务
+	go service.cleanupExpiredRooms()
+
+	return service
 }
 
 type WebRTCMessage struct {
@@ -124,8 +130,10 @@ func (ws *WebRTCService) addClientToRoom(code string, client *WebRTCClient) {
 		room = &WebRTCRoom{
 			Code:      code,
 			CreatedAt: time.Now(),
+			ExpiresAt: time.Now().Add(time.Hour), // 1小时后过期
 		}
 		ws.rooms[code] = room
+		log.Printf("自动创建WebRTC房间: %s", code)
 	}
 
 	if client.Role == "sender" {
@@ -205,7 +213,55 @@ func (ws *WebRTCService) forwardMessage(roomCode string, fromClientID string, ms
 	}
 }
 
-// 生成客户端ID
+// CreateRoom 创建或获取房间
+func (ws *WebRTCService) CreateRoom(code string) {
+	ws.roomsMux.Lock()
+	defer ws.roomsMux.Unlock()
+
+	if _, exists := ws.rooms[code]; !exists {
+		ws.rooms[code] = &WebRTCRoom{
+			Code:      code,
+			CreatedAt: time.Now(),
+			ExpiresAt: time.Now().Add(time.Hour), // 1小时后过期
+		}
+		log.Printf("创建WebRTC房间: %s", code)
+	}
+}
+
+// CreateNewRoom 创建新房间并返回房间码
+func (ws *WebRTCService) CreateNewRoom() string {
+	code := ws.generatePickupCode()
+	ws.CreateRoom(code)
+	return code
+}
+
+// generatePickupCode 生成6位取件码
+func (ws *WebRTCService) generatePickupCode() string {
+	rand.Seed(time.Now().UnixNano())
+	code := rand.Intn(900000) + 100000
+	return fmt.Sprintf("%d", code)
+}
+
+// cleanupExpiredRooms 定期清理过期房间
+func (ws *WebRTCService) cleanupExpiredRooms() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		ws.roomsMux.Lock()
+		now := time.Now()
+		for code, room := range ws.rooms {
+			// 房间过期或无客户端连接则删除
+			if now.After(room.ExpiresAt) || (room.Sender == nil && room.Receiver == nil) {
+				delete(ws.rooms, code)
+				log.Printf("清理过期WebRTC房间: %s", code)
+			}
+		}
+		ws.roomsMux.Unlock()
+	}
+}
+
+// generateClientID 生成客户端ID
 func (ws *WebRTCService) generateClientID() string {
 	return fmt.Sprintf("webrtc_client_%d", rand.Int63())
 }

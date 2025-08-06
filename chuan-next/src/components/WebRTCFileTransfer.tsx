@@ -37,6 +37,8 @@ export const WebRTCFileTransfer: React.FC = () => {
   const [pickupCode, setPickupCode] = useState('');
   const [mode, setMode] = useState<'send' | 'receive'>('send');
   const [hasProcessedInitialUrl, setHasProcessedInitialUrl] = useState(false);
+  const [isJoiningRoom, setIsJoiningRoom] = useState(false); // 添加加入房间状态
+  const urlProcessedRef = useRef(false); // 使用 ref 防止重复处理 URL
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const {
@@ -55,8 +57,94 @@ export const WebRTCFileTransfer: React.FC = () => {
     onFileProgress
   } = useWebRTCTransfer();
 
+  // 加入房间 (接收模式) - 提前定义以供 useEffect 使用
+  const joinRoom = useCallback(async (code: string) => {
+    console.log('=== 加入房间 ===');
+    console.log('取件码:', code);
+    
+    const trimmedCode = code.trim();
+    
+    // 检查取件码格式
+    if (!trimmedCode || trimmedCode.length !== 6) {
+      showToast('请输入正确的6位取件码', "error");
+      return;
+    }
+
+    // 防止重复调用 - 检查是否已经在连接或已连接
+    if (isConnecting || isConnected || isJoiningRoom) {
+      console.log('已在连接中或已连接，跳过重复的房间状态检查');
+      return;
+    }
+    
+    setIsJoiningRoom(true);
+    
+    try {
+      // 先检查房间状态
+      console.log('检查房间状态...');
+      
+      const response = await fetch(`/api/room-info?code=${trimmedCode}`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: 无法检查房间状态`);
+      }
+      
+      const result = await response.json();
+      
+      if (!result.success) {
+        let errorMessage = result.message || '房间不存在或已过期';
+        if (result.message?.includes('expired')) {
+          errorMessage = '房间已过期，请联系发送方重新创建';
+        } else if (result.message?.includes('not found')) {
+          errorMessage = '房间不存在，请检查取件码是否正确';
+        }
+        showToast(errorMessage, "error");
+        return;
+      }
+      
+      // 检查发送方是否在线 (使用新的字段名)
+      if (!result.sender_online) {
+        showToast('发送方不在线，请确认取件码是否正确或联系发送方', "error");
+        return;
+      }
+      
+      console.log('房间状态检查通过，开始连接...');
+      setPickupCode(trimmedCode);
+      
+      connect(trimmedCode, 'receiver');
+      
+      showToast(`正在连接到房间: ${trimmedCode}`, "success");
+    } catch (error) {
+      console.error('检查房间状态失败:', error);
+      let errorMessage = '检查房间状态失败';
+      
+      if (error instanceof Error) {
+        if (error.message.includes('network') || error.message.includes('fetch')) {
+          errorMessage = '网络连接失败，请检查网络状况';
+        } else if (error.message.includes('timeout')) {
+          errorMessage = '请求超时，请重试';
+        } else if (error.message.includes('HTTP 404')) {
+          errorMessage = '房间不存在，请检查取件码';
+        } else if (error.message.includes('HTTP 500')) {
+          errorMessage = '服务器错误，请稍后重试';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      showToast(errorMessage, "error");
+    } finally {
+      setIsJoiningRoom(false); // 重置加入房间状态
+    }
+  }, [isConnecting, isConnected, isJoiningRoom, showToast, connect]); // 添加isJoiningRoom依赖
+
   // 从URL参数中获取初始模式（仅在首次加载时处理）
   useEffect(() => {
+    // 使用 ref 确保只处理一次，避免严格模式的重复调用
+    if (urlProcessedRef.current) {
+      console.log('URL已处理过，跳过重复处理');
+      return;
+    }
+
     const urlMode = searchParams.get('mode') as 'send' | 'receive';
     const type = searchParams.get('type');
     const code = searchParams.get('code');
@@ -66,16 +154,88 @@ export const WebRTCFileTransfer: React.FC = () => {
       console.log('=== 处理初始URL参数 ===');
       console.log('URL模式:', urlMode, '类型:', type, '取件码:', code);
       
+      // 立即标记为已处理，防止重复
+      urlProcessedRef.current = true;
+      
       setMode(urlMode);
       setHasProcessedInitialUrl(true);
       
       if (code && urlMode === 'receive') {
-        // 自动加入房间，使用房间状态检查
         console.log('URL中有取件码，自动加入房间');
-        joinRoom(code);
+        // 防止重复调用 - 检查连接状态和加入房间状态
+        if (!isConnecting && !isConnected && !isJoiningRoom) {
+          // 直接调用异步函数，不依赖 joinRoom
+          const autoJoinRoom = async () => {
+            const trimmedCode = code.trim();
+            
+            if (!trimmedCode || trimmedCode.length !== 6) {
+              showToast('请输入正确的6位取件码', "error");
+              return;
+            }
+
+            setIsJoiningRoom(true);
+            
+            try {
+              console.log('检查房间状态...');
+              const response = await fetch(`/api/room-info?code=${trimmedCode}`);
+              
+              if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: 无法检查房间状态`);
+              }
+              
+              const result = await response.json();
+              
+              if (!result.success) {
+                let errorMessage = result.message || '房间不存在或已过期';
+                if (result.message?.includes('expired')) {
+                  errorMessage = '房间已过期，请联系发送方重新创建';
+                } else if (result.message?.includes('not found')) {
+                  errorMessage = '房间不存在，请检查取件码是否正确';
+                }
+                showToast(errorMessage, "error");
+                return;
+              }
+              
+              if (!result.sender_online) {
+                showToast('发送方不在线，请确认取件码是否正确或联系发送方', "error");
+                return;
+              }
+              
+              console.log('房间状态检查通过，开始连接...');
+              setPickupCode(trimmedCode);
+              connect(trimmedCode, 'receiver');
+              showToast(`正在连接到房间: ${trimmedCode}`, "success");
+            } catch (error) {
+              console.error('检查房间状态失败:', error);
+              let errorMessage = '检查房间状态失败';
+              
+              if (error instanceof Error) {
+                if (error.message.includes('network') || error.message.includes('fetch')) {
+                  errorMessage = '网络连接失败，请检查网络状况';
+                } else if (error.message.includes('timeout')) {
+                  errorMessage = '请求超时，请重试';
+                } else if (error.message.includes('HTTP 404')) {
+                  errorMessage = '房间不存在，请检查取件码';
+                } else if (error.message.includes('HTTP 500')) {
+                  errorMessage = '服务器错误，请稍后重试';
+                } else {
+                  errorMessage = error.message;
+                }
+              }
+              
+              showToast(errorMessage, "error");
+            } finally {
+              setIsJoiningRoom(false);
+            }
+          };
+          
+          autoJoinRoom();
+        } else {
+          console.log('已在连接中或加入房间中，跳过重复处理');
+        }
       }
     }
-  }, [searchParams, hasProcessedInitialUrl]);
+  }, [searchParams, hasProcessedInitialUrl, isConnecting, isConnected, isJoiningRoom, showToast, connect]); // 添加isJoiningRoom依赖
 
   // 更新URL参数
   const updateMode = useCallback((newMode: 'send' | 'receive') => {
@@ -150,6 +310,7 @@ export const WebRTCFileTransfer: React.FC = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          type: 'file',
           files: selectedFiles.map(file => ({
             name: file.name,
             size: file.size,
@@ -176,50 +337,21 @@ export const WebRTCFileTransfer: React.FC = () => {
       showToast(`房间创建成功，取件码: ${code}`, "success");
     } catch (error) {
       console.error('创建房间失败:', error);
-      showToast(error instanceof Error ? error.message : '网络错误，请重试', "error");
-    }
-  };
-
-  // 加入房间 (接收模式)
-  const joinRoom = async (code: string) => {
-    console.log('=== 加入房间 ===');
-    console.log('取件码:', code);
-    
-    const trimmedCode = code.trim();
-    
-    // 检查取件码格式
-    if (!trimmedCode || trimmedCode.length !== 6) {
-      showToast('请输入正确的6位取件码', "error");
-      return;
-    }
-    
-    try {
-      // 先检查房间状态
-      console.log('检查房间状态...');
-      showToast('正在检查房间状态...', "info");
+      let errorMessage = '创建房间失败';
       
-      const response = await fetch(`/api/webrtc-room-status?code=${trimmedCode}`);
-      const result = await response.json();
-      
-      if (!result.success) {
-        showToast(result.message || '房间不存在或已过期', "error");
-        return;
+      if (error instanceof Error) {
+        if (error.message.includes('network') || error.message.includes('fetch')) {
+          errorMessage = '网络连接失败，请检查网络后重试';
+        } else if (error.message.includes('timeout')) {
+          errorMessage = '请求超时，请重试';
+        } else if (error.message.includes('server') || error.message.includes('500')) {
+          errorMessage = '服务器错误，请稍后重试';
+        } else {
+          errorMessage = error.message;
+        }
       }
       
-      // 检查发送方是否在线
-      if (!result.sender_online) {
-        showToast('发送方不在线，请确认取件码是否正确', "error");
-        return;
-      }
-      
-      console.log('房间状态检查通过，开始连接...');
-      setPickupCode(trimmedCode);
-      connect(trimmedCode, 'receiver');
-      
-      showToast(`正在连接到房间: ${trimmedCode}`, "info");
-    } catch (error) {
-      console.error('检查房间状态失败:', error);
-      showToast('检查房间状态失败，请重试', "error");
+      showToast(errorMessage, "error");
     }
   };
 
@@ -259,15 +391,48 @@ export const WebRTCFileTransfer: React.FC = () => {
   }, [onFileListReceived, mode]);
 
   // 处理连接错误
+  const [lastError, setLastError] = useState<string>('');
   useEffect(() => {
-    if (error && mode === 'receive') {
+    if (error && error !== lastError) {
       console.log('=== 连接错误处理 ===');
       console.log('错误信息:', error);
+      console.log('当前模式:', mode);
+      
+      // 根据错误类型显示不同的提示
+      let errorMessage = error;
+      
+      if (error.includes('WebSocket')) {
+        errorMessage = '服务器连接失败，请检查网络连接或稍后重试';
+      } else if (error.includes('数据通道')) {
+        errorMessage = '数据通道连接失败，请重新尝试连接';
+      } else if (error.includes('连接超时')) {
+        errorMessage = '连接超时，请检查网络状况或重新尝试';
+      } else if (error.includes('连接失败')) {
+        errorMessage = 'WebRTC连接失败，可能是网络环境限制，请尝试刷新页面';
+      } else if (error.includes('信令错误')) {
+        errorMessage = '信令服务器错误，请稍后重试';
+      } else if (error.includes('创建连接失败')) {
+        errorMessage = '无法建立P2P连接，请检查网络设置';
+      }
       
       // 显示错误提示
-      showToast(`连接失败: ${error}`, "error");
+      showToast(errorMessage, "error");
+      setLastError(error);
+      
+      // 如果是严重连接错误，清理传输状态
+      if (error.includes('连接失败') || error.includes('数据通道连接失败') || error.includes('WebSocket')) {
+        console.log('严重连接错误，清理传输状态');
+        setCurrentTransferFile(null);
+        
+        // 重置所有正在传输的文件状态
+        setFileList(prev => prev.map(item => 
+          item.status === 'downloading' 
+            ? { ...item, status: 'ready' as const, progress: 0 }
+            : item
+        ));
+      }
     }
-  }, [error, mode, showToast]);
+  }, [error, mode, showToast, lastError]);
 
   // 处理文件接收
   useEffect(() => {
@@ -285,15 +450,21 @@ export const WebRTCFileTransfer: React.FC = () => {
           : item
       ));
       
-      showToast(`${fileData.file.name} 已准备好下载`, "success");
+      // 移除不必要的Toast - 文件完成状态在UI中已经显示
     });
 
     return cleanup;
-  }, [onFileReceived, showToast]);
+  }, [onFileReceived]);
 
   // 监听文件级别的进度更新
   useEffect(() => {
     const cleanup = onFileProgress((progressInfo) => {
+      // 检查连接状态，如果连接断开则忽略进度更新
+      if (!isConnected || error) {
+        console.log('连接已断开，忽略进度更新:', progressInfo.fileName);
+        return;
+      }
+
       console.log('=== 文件进度更新 ===');
       console.log('文件:', progressInfo.fileName, 'ID:', progressInfo.fileId, '进度:', progressInfo.progress);
       
@@ -318,13 +489,13 @@ export const WebRTCFileTransfer: React.FC = () => {
       
       // 当传输完成时显示提示
       if (progressInfo.progress >= 100 && mode === 'send') {
-        showToast(`文件发送完成: ${progressInfo.fileName}`, "success");
+        // 移除不必要的Toast - 传输完成状态在UI中已经显示
         setCurrentTransferFile(null);
       }
     });
 
     return cleanup;
-  }, [onFileProgress, mode, showToast]);
+  }, [onFileProgress, mode, isConnected, error]);
 
   // 实时更新传输进度（旧逻辑 - 删除）
   // useEffect(() => {
@@ -338,6 +509,13 @@ export const WebRTCFileTransfer: React.FC = () => {
       console.log('文件:', fileName, 'ID:', fileId, '当前模式:', mode);
       
       if (mode === 'send') {
+        // 检查连接状态
+        if (!isConnected || error) {
+          console.log('连接已断开，无法发送文件');
+          showToast('连接已断开，无法发送文件', "error");
+          return;
+        }
+
         console.log('当前选中的文件列表:', selectedFiles.map(f => f.name));
         
         // 在发送方的selectedFiles中查找对应文件
@@ -360,30 +538,111 @@ export const WebRTCFileTransfer: React.FC = () => {
         ));
         
         // 发送文件
-        sendFile(file, fileId);
-        
-        // 显示开始传输的提示
-        showToast(`开始发送文件: ${fileName}`, "info");
+        try {
+          sendFile(file, fileId);
+          
+          // 移除不必要的Toast - 传输开始状态在UI中已经显示
+        } catch (sendError) {
+          console.error('发送文件失败:', sendError);
+          showToast(`发送文件失败: ${fileName}`, "error");
+          
+          // 重置文件状态
+          setFileList(prev => prev.map(item => 
+            item.id === fileId || item.name === fileName
+              ? { ...item, status: 'ready' as const, progress: 0 }
+              : item
+          ));
+        }
       } else {
         console.warn('接收模式下收到文件请求，忽略');
       }
     });
 
     return cleanup;
-  }, [onFileRequested, mode, selectedFiles, sendFile, showToast]);
+  }, [onFileRequested, mode, selectedFiles, sendFile, isConnected, error]);
 
-  // 连接状态变化时同步文件列表
+  // 监听WebSocket连接状态变化
   useEffect(() => {
-    console.log('=== 连接状态变化 ===');
+    console.log('=== WebSocket状态变化 ===');
+    console.log('WebSocket连接状态:', isWebSocketConnected);
+    console.log('WebRTC连接状态:', isConnected);
+    console.log('连接中状态:', isConnecting);
+    
+    // 如果WebSocket断开但不是主动断开的情况
+    if (!isWebSocketConnected && !isConnected && !isConnecting && pickupCode) {
+      showToast('与服务器的连接已断开，请重新连接', "error");
+      
+      // 清理传输状态
+      console.log('WebSocket断开，清理传输状态');
+      setCurrentTransferFile(null);
+      setFileList(prev => prev.map(item => 
+        item.status === 'downloading' 
+          ? { ...item, status: 'ready' as const, progress: 0 }
+          : item
+      ));
+    }
+    
+    // WebSocket连接成功时的提示
+    if (isWebSocketConnected && isConnecting && !isConnected) {
+      console.log('WebSocket已连接，正在建立P2P连接...');
+    }
+    
+  }, [isWebSocketConnected, isConnected, isConnecting, pickupCode, showToast]);
+
+  // 监听连接状态变化，清理传输状态
+  useEffect(() => {
+    // 当连接断开或有错误时，清理所有传输状态
+    if ((!isConnected && !isConnecting) || error) {
+      if (currentTransferFile) {
+        console.log('连接断开，清理当前传输文件状态:', currentTransferFile.fileName);
+        setCurrentTransferFile(null);
+      }
+      
+      // 重置所有正在下载的文件状态
+      setFileList(prev => {
+        const hasDownloadingFiles = prev.some(item => item.status === 'downloading');
+        if (hasDownloadingFiles) {
+          console.log('重置正在传输的文件状态');
+          return prev.map(item => 
+            item.status === 'downloading' 
+              ? { ...item, status: 'ready' as const, progress: 0 }
+              : item
+          );
+        }
+        return prev;
+      });
+    }
+  }, [isConnected, isConnecting, error, currentTransferFile]);
+
+  // 监听连接状态变化并提供用户反馈
+  useEffect(() => {
+    console.log('=== WebRTC连接状态变化 ===');
     console.log('连接状态:', {
       isConnected,
+      isConnecting,
+      isWebSocketConnected,
       pickupCode,
       mode,
       selectedFilesCount: selectedFiles.length,
       fileListCount: fileList.length
     });
     
-    if (isConnected && pickupCode && mode === 'send' && selectedFiles.length > 0) {
+    // 连接成功时的提示
+    if (isConnected && !isConnecting) {
+      if (mode === 'send') {
+        // 移除不必要的Toast - 连接状态在UI中已经显示
+      } else {
+        // 移除不必要的Toast - 连接状态在UI中已经显示
+      }
+    }
+    
+    // 连接中的状态
+    if (isConnecting && pickupCode) {
+      console.log('正在建立WebRTC连接...');
+    }
+    
+    // 只有在连接成功且没有错误时才发送文件列表
+    if (isConnected && !error && pickupCode && mode === 'send' && selectedFiles.length > 0) {
       // 确保有文件列表
       if (fileList.length === 0) {
         console.log('创建文件列表并发送...');
@@ -398,17 +657,21 @@ export const WebRTCFileTransfer: React.FC = () => {
         setFileList(newFileInfos);
         // 延迟发送，确保数据通道已准备好
         setTimeout(() => {
-          sendFileList(newFileInfos);
+          if (isConnected && !error) { // 再次检查连接状态
+            sendFileList(newFileInfos);
+          }
         }, 500);
       } else if (fileList.length > 0) {
         console.log('发送现有文件列表...');
         // 延迟发送，确保数据通道已准备好
         setTimeout(() => {
-          sendFileList(fileList);
+          if (isConnected && !error) { // 再次检查连接状态
+            sendFileList(fileList);
+          }
         }, 500);
       }
     }
-  }, [isConnected, pickupCode, mode, selectedFiles.length]);
+  }, [isConnected, isConnecting, isWebSocketConnected, pickupCode, mode, selectedFiles.length, error]);
 
   // 请求下载文件（接收方调用）
   const requestFile = (fileId: string) => {
@@ -417,9 +680,16 @@ export const WebRTCFileTransfer: React.FC = () => {
       return;
     }
 
+    // 检查连接状态
+    if (!isConnected || error) {
+      showToast('连接已断开，请重新连接后再试', "error");
+      return;
+    }
+
     const fileInfo = fileList.find(f => f.id === fileId);
     if (!fileInfo) {
       console.error('找不到文件信息:', fileId);
+      showToast('找不到文件信息', "error");
       return;
     }
     
@@ -441,22 +711,33 @@ export const WebRTCFileTransfer: React.FC = () => {
     
     // 使用hook的requestFile功能
     console.log('调用hook的requestFile...');
-    requestFileFromHook(fileId, fileInfo.name);
-    
-    showToast(`正在请求文件: ${fileInfo.name}`, "info");
+    try {
+      requestFileFromHook(fileId, fileInfo.name);
+      // 移除不必要的Toast - 请求状态在UI中已经显示
+    } catch (requestError) {
+      console.error('请求文件失败:', requestError);
+      showToast(`请求文件失败: ${fileInfo.name}`, "error");
+      
+      // 重置文件状态
+      setFileList(prev => prev.map(item => 
+        item.id === fileId 
+          ? { ...item, status: 'ready' as const, progress: 0 }
+          : item
+      ));
+    }
   };
 
   // 复制取件码
   const copyCode = () => {
     navigator.clipboard.writeText(pickupCode);
-    showToast("取件码已复制到剪贴板", "success");
+    showToast("取件码已复制", "success");
   };
 
   // 复制链接
   const copyLink = () => {
     const link = `${window.location.origin}?type=webrtc&mode=receive&code=${pickupCode}`;
     navigator.clipboard.writeText(link);
-    showToast("取件链接已复制到剪贴板", "success");
+    showToast("取件链接已复制", "success");
   };
 
   // 重置状态
@@ -514,13 +795,6 @@ export const WebRTCFileTransfer: React.FC = () => {
   };
 
   const pickupLink = pickupCode ? `${typeof window !== 'undefined' ? window.location.origin : ''}?type=webrtc&mode=receive&code=${pickupCode}` : '';
-
-  // 显示错误信息
-  useEffect(() => {
-    if (error) {
-      showToast(error, "error");
-    }
-  }, [error, showToast]);
 
   return (
     <div className="space-y-4 sm:space-y-6">

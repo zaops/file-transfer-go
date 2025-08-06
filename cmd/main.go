@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"chuan/internal/handlers"
-	"chuan/internal/services"
 	"chuan/internal/web"
 
 	"github.com/go-chi/chi/v5"
@@ -34,11 +33,8 @@ func main() {
 		os.Exit(0)
 	}
 
-	// 初始化服务
-	p2pService := services.NewP2PService()
-
 	// 初始化处理器
-	h := handlers.NewHandler(p2pService)
+	h := handlers.NewHandler()
 
 	// 创建路由
 	r := chi.NewRouter()
@@ -58,27 +54,15 @@ func main() {
 		MaxAge:           300,
 	}))
 
-	// // 静态文件服务
-	// fileServer := http.FileServer(http.Dir("./web/static/"))
-	// r.Handle("/static/*", http.StripPrefix("/static", fileServer))
-
 	// 嵌入式前端文件服务
 	r.Handle("/*", web.CreateFrontendHandler())
 
-	// 路由定义
-	r.Get("/api", h.IndexHandler) // API 状态页面
+	// WebRTC信令WebSocket路由
 	r.Get("/ws/webrtc", h.HandleWebRTCWebSocket)
 
-	// 文字传输API路由
-	r.Post("/api/create-text-room", h.CreateTextRoomHandler)
-	r.Get("/api/get-text-content", h.GetTextContentHandler)
-
-	// 文件传输API路由
+	// WebRTC房间API
 	r.Post("/api/create-room", h.CreateRoomHandler)
-	r.Get("/api/room-info", h.RoomInfoHandler)
-
-	// WebRTC API路由
-	r.Get("/api/webrtc-room-status", h.WebRTCRoomStatusHandler)
+	r.Get("/api/room-info", h.RoomStatusHandler)
 
 	// 构建服务器地址
 	addr := fmt.Sprintf(":%d", *port)
