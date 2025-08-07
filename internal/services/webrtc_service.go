@@ -237,8 +237,9 @@ func (ws *WebRTCService) CreateNewRoom() string {
 
 // generatePickupCode 生成6位取件码
 func (ws *WebRTCService) generatePickupCode() string {
-	rand.Seed(time.Now().UnixNano())
-	code := rand.Intn(900000) + 100000
+	source := rand.NewSource(time.Now().UnixNano())
+	rng := rand.New(source)
+	code := rng.Intn(900000) + 100000
 	return fmt.Sprintf("%d", code)
 }
 
@@ -312,11 +313,14 @@ func (ws *WebRTCService) GetRoomStatus(code string) map[string]interface{} {
 	room := ws.rooms[code]
 	if room == nil {
 		return map[string]interface{}{
-			"exists": false,
+			"success": false,
+			"exists":  false,
+			"message": "房间不存在或已过期",
 		}
 	}
 
 	return map[string]interface{}{
+		"success":         true,
 		"exists":          true,
 		"sender_online":   room.Sender != nil,
 		"receiver_online": room.Receiver != nil,

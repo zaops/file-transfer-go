@@ -62,7 +62,8 @@ func main() {
 
 	// WebRTC房间API
 	r.Post("/api/create-room", h.CreateRoomHandler)
-	r.Get("/api/room-info", h.RoomStatusHandler)
+	r.Get("/api/room-info", h.WebRTCRoomStatusHandler)
+	r.Get("/api/webrtc-room-status", h.WebRTCRoomStatusHandler)
 
 	// 构建服务器地址
 	addr := fmt.Sprintf(":%d", *port)

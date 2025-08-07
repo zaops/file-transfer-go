@@ -139,9 +139,11 @@ export function useWebRTCTransfer() {
       disconnect: textTransfer.disconnect,
       sendMessage: textTransfer.sendMessage,
       sendTypingStatus: textTransfer.sendTypingStatus,
+      sendRealTimeText: textTransfer.sendRealTimeText,
       clearMessages: textTransfer.clearMessages,
       onMessageReceived: textTransfer.onMessageReceived,
       onTypingStatus: textTransfer.onTypingStatus,
+      onRealTimeText: textTransfer.onRealTimeText,
     },
 
     // 整体状态（用于 UI 显示）

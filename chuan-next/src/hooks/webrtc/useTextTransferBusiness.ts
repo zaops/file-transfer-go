@@ -180,6 +180,12 @@ export function useTextTransferBusiness() {
     });
   }, [webrtcCore.getChannelState, webrtcCore.sendMessage]);
 
+  // 注册实时文本回调
+  const onRealTimeText = useCallback((callback: RealTimeTextCallback) => {
+    realTimeTextCallbacks.current.add(callback);
+    return () => { realTimeTextCallbacks.current.delete(callback); };
+  }, []);
+
   // 清空消息
   const clearMessages = useCallback(() => {
     updateState({ messages: [] });
@@ -220,10 +226,12 @@ export function useTextTransferBusiness() {
     disconnect: webrtcCore.disconnect,
     sendMessage,
     sendTypingStatus,
+    sendRealTimeText,
     clearMessages,
 
     // 回调注册
     onMessageReceived,
     onTypingStatus,
+    onRealTimeText,
   };
 }

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 
 	"chuan/internal/services"
@@ -37,6 +38,7 @@ func (h *Handler) CreateRoomHandler(w http.ResponseWriter, r *http.Request) {
 
 	// 创建新房间
 	code := h.webrtcService.CreateNewRoom()
+	log.Printf("创建房间成功: %s", code)
 
 	// 构建响应
 	response := map[string]interface{}{
@@ -48,8 +50,8 @@ func (h *Handler) CreateRoomHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// RoomStatusHandler 获取WebRTC房间状态API
-func (h *Handler) RoomStatusHandler(w http.ResponseWriter, r *http.Request) {
+// WebRTCRoomStatusHandler WebRTC房间状态API
+func (h *Handler) WebRTCRoomStatusHandler(w http.ResponseWriter, r *http.Request) {
 	// 设置响应为JSON格式
 	w.Header().Set("Content-Type", "application/json")
 
@@ -61,35 +63,45 @@ func (h *Handler) RoomStatusHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 从查询参数获取房间代码
 	code := r.URL.Query().Get("code")
-	if code == "" || len(code) != 6 {
+	if code == "" {
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": false,
-			"message": "请提供正确的6位房间码",
+			"message": "缺少房间代码",
 		})
 		return
 	}
 
-	// 获取WebRTC房间状态
-	webrtcStatus := h.webrtcService.GetRoomStatus(code)
+	// 获取房间状态
+	status := h.webrtcService.GetRoomStatus(code)
 
-	// 如果房间不存在，返回不存在状态
-	if !webrtcStatus["exists"].(bool) {
+	json.NewEncoder(w).Encode(status)
+}
+
+// GetRoomStatusHandler 获取房间状态API
+func (h *Handler) GetRoomStatusHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method != http.MethodGet {
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": false,
-			"message": "房间不存在",
+			"message": "方法不允许",
 		})
 		return
 	}
 
-	// 构建响应
-	response := map[string]interface{}{
-		"success":         true,
-		"message":         "房间状态获取成功",
-		"sender_online":   webrtcStatus["sender_online"],
-		"receiver_online": webrtcStatus["receiver_online"],
-		"created_at":      webrtcStatus["created_at"],
+	// 获取房间码
+	code := r.URL.Query().Get("code")
+	if code == "" {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"message": "房间码不能为空",
+		})
+		return
 	}
 
-	json.NewEncoder(w).Encode(response)
+	// 获取房间状态
+	status := h.webrtcService.GetRoomStatus(code)
+	json.NewEncoder(w).Encode(status)
 }

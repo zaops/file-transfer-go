@@ -12,11 +12,13 @@ interface ApiResponse {
 }
 
 interface CreateRoomData {
-  roomType?: string;
+  type?: string;
+  content?: string;
   password?: string;
 }
 
 interface CreateTextRoomData {
+  type: string;
   content: string;
   password?: string;
 }
@@ -92,7 +94,7 @@ export class ClientAPI {
   }
 
   /**
-   * 创建房间
+   * 创建房间（统一接口）
    */
   async createRoom(data: CreateRoomData): Promise<ApiResponse> {
     return this.post('/api/create-room', data);
@@ -101,29 +103,42 @@ export class ClientAPI {
   /**
    * 创建文本房间
    */
-  async createTextRoom(data: CreateTextRoomData): Promise<ApiResponse> {
-    return this.post('/api/create-text-room', data);
+  async createTextRoom(content: string): Promise<ApiResponse> {
+    return this.post('/api/create-room', {
+      type: 'text',
+      content: content
+    });
   }
 
   /**
    * 获取文本内容
    */
-  async getTextContent(roomId: string): Promise<ApiResponse> {
-    return this.get(`/api/get-text-content?roomId=${roomId}`);
+  async getTextContent(code: string): Promise<ApiResponse> {
+    return this.get(`/api/get-text-content?code=${code}`);
+  }
+
+  /**
+   * 更新文本内容
+   */
+  async updateTextContent(code: string, content: string): Promise<ApiResponse> {
+    return this.post('/api/update-text-content', {
+      code: code,
+      content: content
+    });
   }
 
   /**
    * 获取房间信息
    */
-  async getRoomInfo(roomId: string): Promise<ApiResponse> {
-    return this.get(`/api/room-info?roomId=${roomId}`);
+  async getRoomInfo(code: string): Promise<ApiResponse> {
+    return this.get(`/api/room-info?code=${code}`);
   }
 
   /**
-   * 获取房间状态
+   * 获取WebRTC房间状态
    */
-  async getRoomStatus(roomId: string): Promise<ApiResponse> {
-    return this.get(`/api/room-status?roomId=${roomId}`);
+  async getWebRTCRoomStatus(code: string): Promise<ApiResponse> {
+    return this.get(`/api/webrtc-room-status?code=${code}`);
   }
 
   /**
