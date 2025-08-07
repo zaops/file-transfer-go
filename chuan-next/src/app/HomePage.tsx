@@ -10,7 +10,7 @@ import TextTransferWrapper from '@/components/TextTransferWrapper';
 
 export default function HomePage() {
   const searchParams = useSearchParams();
-  const [activeTab, setActiveTab] = useState('message');
+  const [activeTab, setActiveTab] = useState('webrtc');
   const [hasInitialized, setHasInitialized] = useState(false);
   
   // 根据URL参数设置初始标签（仅首次加载时）
@@ -34,7 +34,7 @@ export default function HomePage() {
         console.log('切换到对应标签页:', urlType);
         setActiveTab(urlType);
       } else {
-        console.log('没有有效的type参数，保持默认标签页');
+        console.log('没有有效的type参数，使用默认标签页：webrtc（文件传输）');
       }
       
       setHasInitialized(true);

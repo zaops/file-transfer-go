@@ -752,6 +752,60 @@ export default function TextTransfer({
 
                 {/* 房间信息卡片 - 类似文件传输的布局 */}
                 <div className="space-y-6">
+                  {/* 已发送的图片 - 移到最上面 */}
+                  {mode === 'send' && sentImages.length > 0 && (
+                    <div className="bg-white/80 backdrop-blur-sm rounded-xl p-4 border border-slate-200">
+                      <h3 className="text-lg font-medium text-slate-800 mb-3 flex items-center">
+                        <Image className="w-5 h-5 mr-2" />
+                        已发送的图片 ({sentImages.length})
+                      </h3>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {sentImages.map((img, index) => (
+                          <div key={index} className="relative group overflow-hidden">
+                            <img 
+                              src={img} 
+                              alt={`图片 ${index + 1}`}
+                              className="w-full h-24 object-cover rounded-lg border-2 border-slate-200 hover:border-blue-400 transition-all duration-200 cursor-pointer bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50"
+                              onClick={() => setPreviewImage(img)}
+                              onError={(e) => {
+                                console.error('图片加载失败:', img);
+                                e.currentTarget.style.display = 'none';
+                              }}
+                            />                            
+                            {/* 悬浮按钮组 */}
+                            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPreviewImage(img);
+                                }}
+                                className="p-1.5 bg-white bg-opacity-90 hover:bg-opacity-100 rounded-md shadow-sm transition-all hover:scale-105"
+                                title="预览图片"
+                              >
+                                <Eye className="w-3.5 h-3.5 text-slate-600" />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  downloadImage(img, index);
+                                }}
+                                className="p-1.5 bg-white bg-opacity-90 hover:bg-opacity-100 rounded-md shadow-sm transition-all hover:scale-105"
+                                title="下载图片"
+                              >
+                                <Download className="w-3.5 h-3.5 text-slate-600" />
+                              </button>
+                            </div>
+                            
+                            {/* 图片序号 */}
+                            <div className="absolute bottom-1 left-1 bg-black bg-opacity-50 text-white text-xs px-1.5 py-0.5 rounded">
+                              {index + 1}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* 左上角状态提示 - 类似已选择文件的风格 */}
                   <div className="flex items-center">
                     <div className="flex items-center space-x-3">
@@ -821,60 +875,6 @@ export default function TextTransfer({
                       </Button>
                     </div>
                   </div>                                
-                </div>
-              </div>
-            )}
-
-            {/* 发送方显示已发送的图片 */}
-            {mode === 'send' && sentImages.length > 0 && (
-              <div className="mt-6">
-                <h3 className="text-lg font-medium text-slate-800 mb-3 flex items-center">
-                  <Image className="w-5 h-5 mr-2" />
-                  已发送的图片 ({sentImages.length})
-                </h3>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {sentImages.map((img, index) => (
-                    <div key={index} className="relative group overflow-hidden">
-                      <img 
-                        src={img} 
-                        alt={`图片 ${index + 1}`}
-                        className="w-full h-24 object-cover rounded-lg border-2 border-slate-200 hover:border-blue-400 transition-all duration-200 cursor-pointer bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50"
-                        onClick={() => setPreviewImage(img)}
-                        onError={(e) => {
-                          console.error('图片加载失败:', img);
-                          e.currentTarget.style.display = 'none';
-                        }}
-                      />                      
-                      {/* 悬浮按钮组 */}
-                      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPreviewImage(img);
-                          }}
-                          className="p-1.5 bg-white bg-opacity-90 hover:bg-opacity-100 rounded-md shadow-sm transition-all hover:scale-105"
-                          title="预览图片"
-                        >
-                          <Eye className="w-3.5 h-3.5 text-slate-600" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            downloadImage(img, index);
-                          }}
-                          className="p-1.5 bg-white bg-opacity-90 hover:bg-opacity-100 rounded-md shadow-sm transition-all hover:scale-105"
-                          title="下载图片"
-                        >
-                          <Download className="w-3.5 h-3.5 text-slate-600" />
-                        </button>
-                      </div>
-                      
-                      {/* 图片序号 */}
-                      <div className="absolute bottom-1 left-1 bg-black bg-opacity-50 text-white text-xs px-1.5 py-0.5 rounded">
-                        {index + 1}
-                      </div>
-                    </div>
-                  ))}
                 </div>
               </div>
             )}
