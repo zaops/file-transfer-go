@@ -1,5 +1,12 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // 编译器配置 - 在生产环境中去掉 console.log
+  compiler: {
+    removeConsole: process.env.NODE_ENV === 'production' ? {
+      exclude: ['error', 'warn', 'info'], // 保留 console.error, console.warn, console.info
+    } : false,
+  },
+
   // 环境变量配置
   env: {
     GO_BACKEND_URL: process.env.GO_BACKEND_URL,
