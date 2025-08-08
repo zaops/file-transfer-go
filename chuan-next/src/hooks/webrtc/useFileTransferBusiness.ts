@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { useWebRTCCore } from './useWebRTCCore';
+import type { WebRTCConnection } from './useSharedWebRTCManager';
 
 // 文件传输状态
 interface FileTransferState {
@@ -9,7 +9,7 @@ interface FileTransferState {
   receivedFiles: Array<{ id: string; file: File }>;
 }
 
-// 文件信息（用于文件列表）
+// 文件信息
 interface FileInfo {
   id: string;
   name: string;
@@ -40,22 +40,14 @@ type FileRequestedCallback = (fileId: string, fileName: string) => void;
 type FileProgressCallback = (progressInfo: { fileId: string; fileName: string; progress: number }) => void;
 type FileListReceivedCallback = (fileList: FileInfo[]) => void;
 
+const CHANNEL_NAME = 'file-transfer';
 const CHUNK_SIZE = 256 * 1024; // 256KB
 
 /**
  * 文件传输业务层
- * 使用 WebRTC 核心连接逻辑实现文件传输功能
- * 每个实例有独立的连接，但复用相同的连接建立逻辑
- * 
- * 支持功能：
- * - 文件发送/接收
- * - 文件列表同步
- * - 文件请求机制
- * - 进度跟踪
- * - 多文件传输
+ * 必须传入共享的 WebRTC 连接
  */
-export function useFileTransferBusiness() {
-  const webrtcCore = useWebRTCCore('file-transfer');
+export function useFileTransferBusiness(connection: WebRTCConnection) {
 
   const [state, setState] = useState<FileTransferState>({
     isTransferring: false,
@@ -84,11 +76,11 @@ export function useFileTransferBusiness() {
     setState(prev => ({ ...prev, ...updates }));
   }, []);
 
-  // 处理文件传输消息
+  // 消息处理器
   const handleMessage = useCallback((message: any) => {
-    console.log('文件传输处理消息:', message.type);
+    if (!message.type.startsWith('file-')) return;
     
-    switch (message.type) {
+    console.log('文件传输收到消息:', message.type, message);    switch (message.type) {
       case 'file-metadata':
         const metadata: FileMetadata = message.payload;
         console.log('开始接收文件:', metadata.name);
@@ -127,10 +119,7 @@ export function useFileTransferBusiness() {
             progress: 100
           }));
 
-          // 触发回调
           fileReceivedCallbacks.current.forEach(cb => cb({ id: fileId, file }));
-          
-          // 清理
           receivingFiles.current.delete(fileId);
         }
         break;
@@ -165,7 +154,6 @@ export function useFileTransferBusiness() {
       const progress = (fileInfo.receivedChunks / totalChunks) * 100;
       updateState({ progress });
       
-      // 触发文件级别的进度回调
       fileProgressCallbacks.current.forEach(cb => cb({
         fileId: fileId,
         fileName: fileInfo.metadata.name,
@@ -179,23 +167,24 @@ export function useFileTransferBusiness() {
 
   // 设置处理器
   useEffect(() => {
-    webrtcCore.setMessageHandler(handleMessage);
-    webrtcCore.setDataHandler(handleData);
+    // 使用共享连接的注册方式
+    const unregisterMessage = connection.registerMessageHandler(CHANNEL_NAME, handleMessage);
+    const unregisterData = connection.registerDataHandler(CHANNEL_NAME, handleData);
 
     return () => {
-      webrtcCore.setMessageHandler(null);
-      webrtcCore.setDataHandler(null);
+      unregisterMessage();
+      unregisterData();
     };
-  }, [webrtcCore.setMessageHandler, webrtcCore.setDataHandler, handleMessage, handleData]);
+  }, [handleMessage, handleData]);
 
   // 连接
   const connect = useCallback((roomCode: string, role: 'sender' | 'receiver') => {
-    return webrtcCore.connect(roomCode, role);
-  }, [webrtcCore.connect]);
+    return connection.connect(roomCode, role);
+  }, [connection]);
 
   // 发送文件
   const sendFile = useCallback(async (file: File, fileId?: string) => {
-    if (webrtcCore.getChannelState() !== 'open') {
+    if (connection.getChannelState() !== 'open') {
       updateState({ error: '连接未就绪' });
       return;
     }
@@ -209,7 +198,7 @@ export function useFileTransferBusiness() {
 
     try {
       // 1. 发送文件元数据
-      webrtcCore.sendMessage({
+      connection.sendMessage({
         type: 'file-metadata',
         payload: {
           id: actualFileId,
@@ -217,7 +206,7 @@ export function useFileTransferBusiness() {
           size: file.size,
           type: file.type
         }
-      });
+      }, CHANNEL_NAME);
 
       // 2. 分块发送文件
       for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
@@ -226,23 +215,22 @@ export function useFileTransferBusiness() {
         const chunk = file.slice(start, end);
 
         // 先发送块信息
-        webrtcCore.sendMessage({
+        connection.sendMessage({
           type: 'file-chunk-info',
           payload: {
             fileId: actualFileId,
             chunkIndex,
             totalChunks
           }
-        });
+        }, CHANNEL_NAME);
 
         // 再发送块数据
         const arrayBuffer = await chunk.arrayBuffer();
-        webrtcCore.sendData(arrayBuffer);
+        connection.sendData(arrayBuffer);
 
         const progress = ((chunkIndex + 1) / totalChunks) * 100;
         updateState({ progress });
         
-        // 触发文件级别的进度回调
         fileProgressCallbacks.current.forEach(cb => cb({
           fileId: actualFileId,
           fileName: file.name,
@@ -256,10 +244,10 @@ export function useFileTransferBusiness() {
       }
 
       // 3. 发送完成信号
-      webrtcCore.sendMessage({
+      connection.sendMessage({
         type: 'file-complete',
         payload: { fileId: actualFileId }
-      });
+      }, CHANNEL_NAME);
 
       updateState({ isTransferring: false, progress: 100 });
       console.log('文件发送完成:', file.name);
@@ -271,57 +259,54 @@ export function useFileTransferBusiness() {
         isTransferring: false 
       });
     }
-  }, [webrtcCore.getChannelState, webrtcCore.sendMessage, webrtcCore.sendData, updateState]);
+  }, [connection, updateState]);
 
   // 发送文件列表
   const sendFileList = useCallback((fileList: FileInfo[]) => {
-    if (webrtcCore.getChannelState() !== 'open') {
+    if (connection.getChannelState() !== 'open') {
       console.error('数据通道未准备就绪，无法发送文件列表');
       return;
     }
 
     console.log('发送文件列表:', fileList);
     
-    webrtcCore.sendMessage({
+    connection.sendMessage({
       type: 'file-list',
       payload: fileList
-    });
-  }, [webrtcCore.getChannelState, webrtcCore.sendMessage]);
+    }, CHANNEL_NAME);
+  }, [connection]);
 
   // 请求文件
   const requestFile = useCallback((fileId: string, fileName: string) => {
-    if (webrtcCore.getChannelState() !== 'open') {
+    if (connection.getChannelState() !== 'open') {
       console.error('数据通道未准备就绪，无法请求文件');
       return;
     }
 
     console.log('请求文件:', fileName, fileId);
     
-    webrtcCore.sendMessage({
+    connection.sendMessage({
       type: 'file-request',
       payload: { fileId, fileName }
-    });
-  }, [webrtcCore.getChannelState, webrtcCore.sendMessage]);
+    }, CHANNEL_NAME);
+  }, [connection]);
 
-  // 注册文件接收回调
+  // 注册回调函数
   const onFileReceived = useCallback((callback: FileReceivedCallback) => {
     fileReceivedCallbacks.current.add(callback);
     return () => { fileReceivedCallbacks.current.delete(callback); };
   }, []);
 
-  // 注册文件请求回调
   const onFileRequested = useCallback((callback: FileRequestedCallback) => {
     fileRequestedCallbacks.current.add(callback);
     return () => { fileRequestedCallbacks.current.delete(callback); };
   }, []);
 
-  // 注册进度回调
   const onFileProgress = useCallback((callback: FileProgressCallback) => {
     fileProgressCallbacks.current.add(callback);
     return () => { fileProgressCallbacks.current.delete(callback); };
   }, []);
 
-  // 注册文件列表回调
   const onFileListReceived = useCallback((callback: FileListReceivedCallback) => {
     fileListCallbacks.current.add(callback);
     return () => { fileListCallbacks.current.delete(callback); };
@@ -329,17 +314,17 @@ export function useFileTransferBusiness() {
 
   return {
     // 继承基础连接状态
-    isConnected: webrtcCore.isConnected,
-    isConnecting: webrtcCore.isConnecting,
-    isWebSocketConnected: webrtcCore.isWebSocketConnected,
-    connectionError: webrtcCore.error,
+    isConnected: connection.isConnected,
+    isConnecting: connection.isConnecting,
+    isWebSocketConnected: connection.isWebSocketConnected,
+    connectionError: connection.error,
 
     // 文件传输状态
     ...state,
 
     // 操作方法
     connect,
-    disconnect: webrtcCore.disconnect,
+    disconnect: connection.disconnect,
     sendFile,
     sendFileList,
     requestFile,

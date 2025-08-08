@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Upload, MessageSquare, Monitor } from 'lucide-react';
 import Hero from '@/components/Hero';
 import { WebRTCFileTransfer } from '@/components/WebRTCFileTransfer';
-import TextTransferWrapper from '@/components/TextTransferWrapper';
+import {WebRTCTextImageTransfer} from '@/components/WebRTCTextImageTransfer';
 
 export default function HomePage() {
   const searchParams = useSearchParams();
@@ -90,7 +90,7 @@ export default function HomePage() {
               </TabsContent>
 
               <TabsContent value="message" className="mt-0 animate-fade-in-up">
-                <TextTransferWrapper />
+                <WebRTCTextImageTransfer />
               </TabsContent>
 
               <TabsContent value="desktop" className="mt-0 animate-fade-in-up">

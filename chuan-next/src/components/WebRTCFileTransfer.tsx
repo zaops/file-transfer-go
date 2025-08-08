@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { useWebRTCTransfer } from '@/hooks/useWebRTCTransfer';
+import { useSharedWebRTCManager } from '@/hooks/webrtc/useSharedWebRTCManager';
+import { useFileTransferBusiness } from '@/hooks/webrtc/useFileTransferBusiness';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast-simple';
 import { Upload, Download } from 'lucide-react';
@@ -41,11 +42,19 @@ export const WebRTCFileTransfer: React.FC = () => {
   const urlProcessedRef = useRef(false); // 使用 ref 防止重复处理 URL
   const fileInputRef = useRef<HTMLInputElement>(null);
   
+  // 创建共享连接
+  const connection = useSharedWebRTCManager();
+  
+  // 使用共享连接创建业务层
   const {
     isConnected,
     isConnecting,
     isWebSocketConnected,
+    connectionError,
+    isTransferring,
+    progress,
     error,
+    receivedFiles,
     connect,
     disconnect,
     sendFile,
@@ -55,7 +64,7 @@ export const WebRTCFileTransfer: React.FC = () => {
     onFileListReceived,
     onFileRequested,
     onFileProgress
-  } = useWebRTCTransfer();
+  } = useFileTransferBusiness(connection);
 
   // 加入房间 (接收模式) - 提前定义以供 useEffect 使用
   const joinRoom = useCallback(async (code: string) => {
