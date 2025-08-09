@@ -1,3 +1,4 @@
+import { UrlSource } from './../../../node_modules/lightningcss/node/ast.d';
 import { useState, useRef, useCallback } from 'react';
 import { config } from '@/lib/config';
 
@@ -27,21 +28,21 @@ export interface WebRTCConnection {
   isConnecting: boolean;
   isWebSocketConnected: boolean;
   error: string | null;
-  
+
   // 操作方法
   connect: (roomCode: string, role: 'sender' | 'receiver') => Promise<void>;
   disconnect: () => void;
   sendMessage: (message: WebRTCMessage, channel?: string) => boolean;
   sendData: (data: ArrayBuffer) => boolean;
-  
+
   // 处理器注册
   registerMessageHandler: (channel: string, handler: MessageHandler) => () => void;
   registerDataHandler: (channel: string, handler: DataHandler) => () => void;
-  
+
   // 工具方法
   getChannelState: () => RTCDataChannelState;
   isConnectedToRoom: (roomCode: string, role: 'sender' | 'receiver') => boolean;
-  
+
   // 当前房间信息
   currentRoom: { code: string; role: 'sender' | 'receiver' } | null;
 }
@@ -72,6 +73,7 @@ export function useSharedWebRTCManager(): WebRTCConnection {
 
   // STUN 服务器配置
   const STUN_SERVERS = [
+    { urls: 'stun:stun.chat.bilibili.com' },
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun.miwifi.com' },
     { urls: 'stun:turn.cloudflare.com:3478' },
@@ -114,9 +116,9 @@ export function useSharedWebRTCManager(): WebRTCConnection {
         offerToReceiveAudio: false,
         offerToReceiveVideo: false,
       });
-      
+
       await pc.setLocalDescription(offer);
-      
+
       const iceTimeout = setTimeout(() => {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: 'offer', payload: pc.localDescription }));
@@ -153,7 +155,7 @@ export function useSharedWebRTCManager(): WebRTCConnection {
       try {
         const message = JSON.parse(event.data) as WebRTCMessage;
         console.log('[SharedWebRTC] 收到消息:', message.type, message.channel || 'default');
-        
+
         // 根据通道分发消息
         if (message.channel) {
           const handler = messageHandlers.current.get(message.channel);
@@ -169,7 +171,7 @@ export function useSharedWebRTCManager(): WebRTCConnection {
       }
     } else if (event.data instanceof ArrayBuffer) {
       console.log('[SharedWebRTC] 收到数据:', event.data.byteLength, 'bytes');
-      
+
       // 数据优先发给文件传输处理器
       const fileHandler = dataHandlers.current.get('file-transfer');
       if (fileHandler) {
@@ -351,7 +353,7 @@ export function useSharedWebRTCManager(): WebRTCConnection {
 
       // 数据通道处理
       if (role === 'sender') {
-        const dataChannel = pc.createDataChannel('shared-channel', { 
+        const dataChannel = pc.createDataChannel('shared-channel', {
           ordered: true,
           maxRetransmits: 3
         });
@@ -371,7 +373,7 @@ export function useSharedWebRTCManager(): WebRTCConnection {
         pc.ondatachannel = (event) => {
           const dataChannel = event.channel;
           dcRef.current = dataChannel;
-          
+
           dataChannel.onopen = () => {
             console.log('[SharedWebRTC] 数据通道已打开 (接收方)');
           };
@@ -387,9 +389,9 @@ export function useSharedWebRTCManager(): WebRTCConnection {
 
     } catch (error) {
       console.error('[SharedWebRTC] 连接失败:', error);
-      updateState({ 
+      updateState({
         error: error instanceof Error ? error.message : '连接失败',
-        isConnecting: false 
+        isConnecting: false
       });
     }
   }, [updateState, cleanup, createOffer, handleDataChannelMessage, state.isConnecting, state.isConnected]);
@@ -447,7 +449,7 @@ export function useSharedWebRTCManager(): WebRTCConnection {
   const registerMessageHandler = useCallback((channel: string, handler: MessageHandler) => {
     console.log('[SharedWebRTC] 注册消息处理器:', channel);
     messageHandlers.current.set(channel, handler);
-    
+
     return () => {
       console.log('[SharedWebRTC] 取消注册消息处理器:', channel);
       messageHandlers.current.delete(channel);
@@ -458,7 +460,7 @@ export function useSharedWebRTCManager(): WebRTCConnection {
   const registerDataHandler = useCallback((channel: string, handler: DataHandler) => {
     console.log('[SharedWebRTC] 注册数据处理器:', channel);
     dataHandlers.current.set(channel, handler);
-    
+
     return () => {
       console.log('[SharedWebRTC] 取消注册数据处理器:', channel);
       dataHandlers.current.delete(channel);
@@ -472,9 +474,9 @@ export function useSharedWebRTCManager(): WebRTCConnection {
 
   // 检查是否已连接到指定房间
   const isConnectedToRoom = useCallback((roomCode: string, role: 'sender' | 'receiver') => {
-    return currentRoom.current?.code === roomCode && 
-           currentRoom.current?.role === role && 
-           state.isConnected;
+    return currentRoom.current?.code === roomCode &&
+      currentRoom.current?.role === role &&
+      state.isConnected;
   }, [state.isConnected]);
 
   return {
@@ -497,7 +499,7 @@ export function useSharedWebRTCManager(): WebRTCConnection {
     // 工具方法
     getChannelState,
     isConnectedToRoom,
-    
+
     // 当前房间信息
     currentRoom: currentRoom.current,
   };

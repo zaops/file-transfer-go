@@ -15,25 +15,26 @@ interface WebRTCTextReceiverProps {
   onRestart?: () => void;
 }
 
-export const WebRTCTextReceiver: React.FC<WebRTCTextReceiverProps> = ({ 
-  initialCode = '', 
+export const WebRTCTextReceiver: React.FC<WebRTCTextReceiverProps> = ({
+  initialCode = '',
   onPreviewImage,
   onRestart
 }) => {
   const { showToast } = useToast();
-  
+
   // 状态管理
   const [pickupCode, setPickupCode] = useState('');
   const [inputCode, setInputCode] = useState(initialCode);
   const [receivedText, setReceivedText] = useState(''); // 实时接收的文本内容
-  const [receivedImages, setReceivedImages] = useState<Array<{id: string, content: string, fileName?: string}>>([]);
+  const [receivedImages, setReceivedImages] = useState<Array<{ id: string, content: string, fileName?: string }>>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
-  
+
+
 
   // 创建共享连接 [需要优化]
   const connection = useSharedWebRTCManager();
-  
+
   // 使用共享连接创建业务层
   const textTransfer = useTextTransferBusiness(connection);
   const fileTransfer = useFileTransferBusiness(connection);
@@ -49,9 +50,10 @@ export const WebRTCTextReceiver: React.FC<WebRTCTextReceiverProps> = ({
 
   // 是否有任何连接
   const hasAnyConnection = textTransfer.isConnected || fileTransfer.isConnected;
-  
+
   // 是否正在连接
   const isAnyConnecting = textTransfer.isConnecting || fileTransfer.isConnecting;
+
 
   // 是否有任何错误
   const hasAnyError = textTransfer.connectionError || fileTransfer.connectionError;
@@ -60,20 +62,20 @@ export const WebRTCTextReceiver: React.FC<WebRTCTextReceiverProps> = ({
   const validatePickupCode = async (code: string): Promise<boolean> => {
     try {
       setIsValidating(true);
-      
+
       console.log('开始验证取件码:', code);
       const response = await fetch(`/api/room-info?code=${code}`);
       const data = await response.json();
-      
+
       console.log('验证响应:', { status: response.status, data });
-      
+
       if (!response.ok || !data.success) {
         const errorMessage = data.message || '取件码验证失败';
         showToast(errorMessage, 'error');
         console.log('验证失败:', errorMessage);
         return false;
       }
-      
+
       console.log('取件码验证成功:', data.room);
       return true;
     } catch (error) {
@@ -93,11 +95,11 @@ export const WebRTCTextReceiver: React.FC<WebRTCTextReceiverProps> = ({
     setReceivedText('');
     setReceivedImages([]);
     setIsTyping(false);
-    
+
     // 断开连接
     textTransfer.disconnect();
     fileTransfer.disconnect();
-    
+
     if (onRestart) {
       onRestart();
     }
@@ -106,7 +108,7 @@ export const WebRTCTextReceiver: React.FC<WebRTCTextReceiverProps> = ({
   // 加入房间
   const joinRoom = useCallback(async (code: string) => {
     const trimmedCode = code.trim().toUpperCase();
-    
+
     if (!trimmedCode || trimmedCode.length !== 6) {
       showToast('请输入正确的6位取件码', "error");
       return;
@@ -124,15 +126,15 @@ export const WebRTCTextReceiver: React.FC<WebRTCTextReceiverProps> = ({
 
     try {
       console.log('=== 开始验证和连接房间 ===', trimmedCode);
-      
+
       const isValid = await validatePickupCode(trimmedCode);
       if (!isValid) {
         return;
       }
-      
+
       setPickupCode(trimmedCode);
       await connectAll(trimmedCode, 'receiver');
-      
+
       console.log('=== 房间连接成功 ===', trimmedCode);
       showToast(`成功加入消息房间: ${trimmedCode}`, "success");
     } catch (error) {
@@ -185,16 +187,23 @@ export const WebRTCTextReceiver: React.FC<WebRTCTextReceiverProps> = ({
     if (initialCode && initialCode.length === 6 && !hasAnyConnection && !isAnyConnecting) {
       console.log('=== 自动连接初始代码 ===', initialCode);
       setInputCode(initialCode);
-      
+
       const timeoutId = setTimeout(() => {
+        console.log('=== setTimeout 触发，检查最新状态 ===');
+
         if (!hasAnyConnection && !isAnyConnecting) {
+          console.log('=== 最新状态检查通过，调用 joinRoom ===', initialCode);
           joinRoom(initialCode);
         }
       }, 500);
-      
-      return () => clearTimeout(timeoutId);
+      return () => {
+        console.log('=== 清理 setTimeout ===');
+        clearTimeout(timeoutId);
+      };
     }
-  }, [initialCode, hasAnyConnection, isAnyConnecting, joinRoom]);
+    // 注意：这里故意不包含 joinRoom 作为依赖，
+    // 因为我们要的是"一次性"的自动连接行为
+  }, [initialCode, hasAnyConnection, isAnyConnecting]);
 
   return (
     <div className="space-y-6">
@@ -298,7 +307,7 @@ export const WebRTCTextReceiver: React.FC<WebRTCTextReceiverProps> = ({
                 )}
               </div>
             </div>
-            
+
             <div className="relative">
               <textarea
                 value={receivedText}
@@ -316,7 +325,7 @@ export const WebRTCTextReceiver: React.FC<WebRTCTextReceiverProps> = ({
                 </div>
               )}
             </div>
-            
+
             {/* 打字状态提示 */}
             {isTyping && (
               <div className="flex items-center space-x-2 mt-3 text-sm text-slate-500">
@@ -352,7 +361,7 @@ export const WebRTCTextReceiver: React.FC<WebRTCTextReceiverProps> = ({
             </div>
           )}
         </div>
-      )}      
+      )}
     </div>
   );
 };
