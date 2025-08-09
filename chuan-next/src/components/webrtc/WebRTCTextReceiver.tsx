@@ -29,7 +29,7 @@ export const WebRTCTextReceiver: React.FC<WebRTCTextReceiverProps> = ({
   const [receivedImages, setReceivedImages] = useState<Array<{ id: string, content: string, fileName?: string }>>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
-
+  const hasTriedAutoConnect = useRef(false);
 
 
   // 创建共享连接 [需要优化]
@@ -184,26 +184,16 @@ export const WebRTCTextReceiver: React.FC<WebRTCTextReceiverProps> = ({
 
   // 处理初始代码连接
   useEffect(() => {
-    if (initialCode && initialCode.length === 6 && !hasAnyConnection && !isAnyConnecting) {
+    // initialCode isAutoConnected
+    console.log(`initialCode: ${initialCode}, hasTriedAutoConnect: ${hasTriedAutoConnect.current}`);
+    if (initialCode && initialCode.length === 6 && !hasTriedAutoConnect.current) {
       console.log('=== 自动连接初始代码 ===', initialCode);
+      hasTriedAutoConnect.current = true
       setInputCode(initialCode);
-
-      const timeoutId = setTimeout(() => {
-        console.log('=== setTimeout 触发，检查最新状态 ===');
-
-        if (!hasAnyConnection && !isAnyConnecting) {
-          console.log('=== 最新状态检查通过，调用 joinRoom ===', initialCode);
-          joinRoom(initialCode);
-        }
-      }, 500);
-      return () => {
-        console.log('=== 清理 setTimeout ===');
-        clearTimeout(timeoutId);
-      };
+      joinRoom(initialCode);
+      return;
     }
-    // 注意：这里故意不包含 joinRoom 作为依赖，
-    // 因为我们要的是"一次性"的自动连接行为
-  }, [initialCode, hasAnyConnection, isAnyConnecting]);
+  }, [initialCode]);
 
   return (
     <div className="space-y-6">
