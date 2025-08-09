@@ -58,6 +58,14 @@ export const WebRTCTextReceiver: React.FC<WebRTCTextReceiverProps> = ({
   // 是否有任何错误
   const hasAnyError = textTransfer.connectionError || fileTransfer.connectionError;
 
+  // 监听连接错误并显示 toast
+  useEffect(() => {
+    if (hasAnyError) {
+      console.error('[WebRTCTextReceiver] 连接错误:', hasAnyError);
+      showToast(hasAnyError, 'error');
+    }
+  }, [hasAnyError, showToast]);
+
   // 验证取件码是否存在
   const validatePickupCode = async (code: string): Promise<boolean> => {
     try {
