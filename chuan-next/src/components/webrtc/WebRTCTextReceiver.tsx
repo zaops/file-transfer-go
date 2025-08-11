@@ -42,10 +42,11 @@ export const WebRTCTextReceiver: React.FC<WebRTCTextReceiverProps> = ({
   // 连接所有传输通道
   const connectAll = useCallback(async (code: string, role: 'sender' | 'receiver') => {
     console.log('=== 连接所有传输通道 ===', { code, role });
-    await Promise.all([
-      textTransfer.connect(code, role),
-      fileTransfer.connect(code, role)
-    ]);
+    await connection.connect(code, role);
+    // await Promise.all([
+    //     textTransfer.connect(code, role),
+    //     fileTransfer.connect(code, role)
+    // ]);
   }, [textTransfer, fileTransfer]);
 
   // 是否有任何连接

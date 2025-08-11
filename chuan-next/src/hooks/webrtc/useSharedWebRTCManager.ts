@@ -1,4 +1,3 @@
-import { UrlSource } from './../../../node_modules/lightningcss/node/ast.d';
 import { useState, useRef, useCallback } from 'react';
 import { config } from '@/lib/config';
 
@@ -85,28 +84,28 @@ export function useSharedWebRTCManager(): WebRTCConnection {
 
   // 清理连接
   const cleanup = useCallback(() => {
-    console.log('[SharedWebRTC] 清理连接');
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
+    // console.log('[SharedWebRTC] 清理连接');
+    // if (timeoutRef.current) {
+    //   clearTimeout(timeoutRef.current);
+    //   timeoutRef.current = null;
+    // }
 
-    if (dcRef.current) {
-      dcRef.current.close();
-      dcRef.current = null;
-    }
+    // if (dcRef.current) {
+    //   dcRef.current.close();
+    //   dcRef.current = null;
+    // }
 
-    if (pcRef.current) {
-      pcRef.current.close();
-      pcRef.current = null;
-    }
+    // if (pcRef.current) {
+    //   pcRef.current.close();
+    //   pcRef.current = null;
+    // }
 
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
-    }
+    // if (wsRef.current) {
+    //   wsRef.current.close();
+    //   wsRef.current = null;
+    // }
 
-    currentRoom.current = null;
+    // currentRoom.current = null;
   }, []);
 
   // 创建 Offer
