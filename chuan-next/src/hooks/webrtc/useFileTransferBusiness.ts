@@ -3,6 +3,10 @@ import type { WebRTCConnection } from './useSharedWebRTCManager';
 
 // 文件传输状态
 interface FileTransferState {
+  isConnecting: boolean;
+  isConnected: boolean;
+  isWebSocketConnected: boolean;
+  connectionError: string | null;
   isTransferring: boolean;
   progress: number;
   error: string | null;
@@ -50,6 +54,10 @@ const CHUNK_SIZE = 256 * 1024; // 256KB
 export function useFileTransferBusiness(connection: WebRTCConnection) {
 
   const [state, setState] = useState<FileTransferState>({
+    isConnecting: false,
+    isConnected: false,
+    isWebSocketConnected: false,
+    connectionError: null,
     isTransferring: false,
     progress: 0,
     error: null,
@@ -177,6 +185,17 @@ export function useFileTransferBusiness(connection: WebRTCConnection) {
     };
   }, [handleMessage, handleData]);
 
+  // 监听连接状态变化 (直接使用 connection 的状态)
+  useEffect(() => {
+    // 同步连接状态
+    updateState({
+      isConnecting: connection.isConnecting,
+      isConnected: connection.isConnected,
+      isWebSocketConnected: connection.isWebSocketConnected,
+      connectionError: connection.error
+    });
+  }, [connection.isConnecting, connection.isConnected, connection.isWebSocketConnected, connection.error, updateState]);
+
   // 连接
   const connect = useCallback((roomCode: string, role: 'sender' | 'receiver') => {
     return connection.connect(roomCode, role);
@@ -263,6 +282,11 @@ export function useFileTransferBusiness(connection: WebRTCConnection) {
 
   // 发送文件列表
   const sendFileList = useCallback((fileList: FileInfo[]) => {
+    if (!connection.isPeerConnected) {
+      console.log('P2P连接未建立，等待连接后再发送文件列表');
+      return;
+    }
+    
     if (connection.getChannelState() !== 'open') {
       console.error('数据通道未准备就绪，无法发送文件列表');
       return;
@@ -313,13 +337,7 @@ export function useFileTransferBusiness(connection: WebRTCConnection) {
   }, []);
 
   return {
-    // 继承基础连接状态
-    isConnected: connection.isConnected,
-    isConnecting: connection.isConnecting,
-    isWebSocketConnected: connection.isWebSocketConnected,
-    connectionError: connection.error,
-
-    // 文件传输状态
+    // 文件传输状态（包括连接状态）
     ...state,
 
     // 操作方法

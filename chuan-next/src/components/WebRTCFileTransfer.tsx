@@ -287,8 +287,8 @@ export const WebRTCFileTransfer: React.FC = () => {
       const updatedList = [...prev, ...newFileInfos];
       console.log('更新后的文件列表:', updatedList);
       
-      // 如果已连接，立即同步文件列表
-      if (isConnected && pickupCode) {
+      // 如果P2P连接已建立，立即同步文件列表
+      if (isConnected && connection.isPeerConnected && pickupCode) {
         console.log('立即同步文件列表到对端');
         setTimeout(() => sendFileList(updatedList), 100);
       }
@@ -573,18 +573,23 @@ export const WebRTCFileTransfer: React.FC = () => {
     console.log('WebRTC连接状态:', isConnected);
     console.log('连接中状态:', isConnecting);
     
-    // 如果WebSocket断开但不是主动断开的情况
+    // 只有在之前已经建立过连接，现在断开的情况下才显示断开提示
+    // 避免在初始连接时误报断开
     if (!isWebSocketConnected && !isConnected && !isConnecting && pickupCode) {
-      showToast('与服务器的连接已断开，请重新连接', "error");
-      
-      // 清理传输状态
-      console.log('WebSocket断开，清理传输状态');
-      setCurrentTransferFile(null);
-      setFileList(prev => prev.map(item => 
-        item.status === 'downloading' 
-          ? { ...item, status: 'ready' as const, progress: 0 }
-          : item
-      ));
+      // 增加额外检查：只有在之前曾经连接成功过的情况下才显示断开提示
+      // 通过检查是否有文件列表来判断是否曾经连接过
+      if (fileList.length > 0 || currentTransferFile) {
+        showToast('与服务器的连接已断开，请重新连接', "error");
+        
+        // 清理传输状态
+        console.log('WebSocket断开，清理传输状态');
+        setCurrentTransferFile(null);
+        setFileList(prev => prev.map(item => 
+          item.status === 'downloading' 
+            ? { ...item, status: 'ready' as const, progress: 0 }
+            : item
+        ));
+      }
     }
     
     // WebSocket连接成功时的提示
@@ -592,7 +597,7 @@ export const WebRTCFileTransfer: React.FC = () => {
       console.log('WebSocket已连接，正在建立P2P连接...');
     }
     
-  }, [isWebSocketConnected, isConnected, isConnecting, pickupCode, showToast]);
+  }, [isWebSocketConnected, isConnected, isConnecting, pickupCode, showToast, fileList.length, currentTransferFile]);
 
   // 监听连接状态变化，清理传输状态
   useEffect(() => {
@@ -646,8 +651,8 @@ export const WebRTCFileTransfer: React.FC = () => {
       console.log('正在建立WebRTC连接...');
     }
     
-    // 只有在连接成功且没有错误时才发送文件列表
-    if (isConnected && !error && pickupCode && mode === 'send' && selectedFiles.length > 0) {
+    // 只有在P2P连接建立且没有错误时才发送文件列表
+    if (isConnected && connection.isPeerConnected && !error && pickupCode && mode === 'send' && selectedFiles.length > 0) {
       // 确保有文件列表
       if (fileList.length === 0) {
         console.log('创建文件列表并发送...');
@@ -662,7 +667,7 @@ export const WebRTCFileTransfer: React.FC = () => {
         setFileList(newFileInfos);
         // 延迟发送，确保数据通道已准备好
         setTimeout(() => {
-          if (isConnected && !error) { // 再次检查连接状态
+          if (isConnected && connection.isPeerConnected && !error) { // 再次检查连接状态
             sendFileList(newFileInfos);
           }
         }, 500);
@@ -670,13 +675,26 @@ export const WebRTCFileTransfer: React.FC = () => {
         console.log('发送现有文件列表...');
         // 延迟发送，确保数据通道已准备好
         setTimeout(() => {
-          if (isConnected && !error) { // 再次检查连接状态
+          if (isConnected && connection.isPeerConnected && !error) { // 再次检查连接状态
             sendFileList(fileList);
           }
         }, 500);
       }
     }
-  }, [isConnected, isConnecting, isWebSocketConnected, pickupCode, mode, selectedFiles.length, error]);
+  }, [isConnected, connection.isPeerConnected, isConnecting, isWebSocketConnected, pickupCode, mode, selectedFiles.length, error]);
+
+  // 监听P2P连接建立，自动发送文件列表
+  useEffect(() => {
+    if (connection.isPeerConnected && mode === 'send' && fileList.length > 0) {
+      console.log('P2P连接已建立，发送文件列表...');
+      // 稍微延迟一下，确保数据通道完全准备好
+      setTimeout(() => {
+        if (connection.isPeerConnected && connection.getChannelState() === 'open') {
+          sendFileList(fileList);
+        }
+      }, 200);
+    }
+  }, [connection.isPeerConnected, mode, fileList.length, sendFileList]);
 
   // 请求下载文件（接收方调用）
   const requestFile = (fileId: string) => {
@@ -765,7 +783,8 @@ export const WebRTCFileTransfer: React.FC = () => {
     console.log('=== 清空文件 ===');
     setSelectedFiles([]);
     setFileList([]);
-    if (isConnected && pickupCode) {
+    // 只有在P2P连接建立且数据通道准备好时才发送清空消息
+    if (isConnected && connection.isPeerConnected && connection.getChannelState() === 'open' && pickupCode) {
       sendFileList([]);
     }
   };

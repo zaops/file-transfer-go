@@ -106,8 +106,7 @@ export const WebRTCTextReceiver: React.FC<WebRTCTextReceiverProps> = ({
     setIsTyping(false);
 
     // 断开连接
-    textTransfer.disconnect();
-    fileTransfer.disconnect();
+    connection.disconnect();
 
     if (onRestart) {
       onRestart();

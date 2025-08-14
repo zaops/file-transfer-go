@@ -84,9 +84,14 @@ export function useTextTransferBusiness(connection: WebRTCConnection) {
 
   // 监听连接状态变化 (直接使用 connection 的状态)
   useEffect(() => {
-    // 这里我们直接依赖 connection 的状态变化
-    // 由于我们使用共享连接，状态会自动同步
-  }, []);
+    // 同步连接状态
+    updateState({
+      isConnecting: connection.isConnecting,
+      isConnected: connection.isConnected,
+      isWebSocketConnected: connection.isWebSocketConnected,
+      connectionError: connection.error
+    });
+  }, [connection.isConnecting, connection.isConnected, connection.isWebSocketConnected, connection.error, updateState]);
 
   // 连接
   const connect = useCallback((roomCode: string, role: 'sender' | 'receiver') => {
@@ -100,28 +105,32 @@ export function useTextTransferBusiness(connection: WebRTCConnection) {
 
   // 发送实时文本同步 (替代原来的 sendMessage)
   const sendTextSync = useCallback((text: string) => {
-    if (!connection) return;
+    if (!connection || !connection.isPeerConnected) return;
     
     const message = {
       type: 'text-sync',
       payload: { text }
     };
     
-    connection.sendMessage(message, CHANNEL_NAME);
-    console.log('发送实时文本同步:', text.length, '字符');
+    const success = connection.sendMessage(message, CHANNEL_NAME);
+    if (success) {
+      console.log('发送实时文本同步:', text.length, '字符');
+    }
   }, [connection]);
 
   // 发送打字状态
   const sendTypingStatus = useCallback((isTyping: boolean) => {
-    if (!connection) return;
+    if (!connection || !connection.isPeerConnected) return;
     
     const message = {
       type: 'text-typing',
       payload: { typing: isTyping }
     };
     
-    connection.sendMessage(message, CHANNEL_NAME);
-    console.log('发送打字状态:', isTyping);
+    const success = connection.sendMessage(message, CHANNEL_NAME);
+    if (success) {
+      console.log('发送打字状态:', isTyping);
+    }
   }, [connection]);
 
   // 设置文本同步回调

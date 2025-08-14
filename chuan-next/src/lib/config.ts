@@ -24,7 +24,7 @@ const getCurrentBaseUrl = () => {
   return 'http://localhost:8080';
 };
 
-// 动态获取 WebSocket URL
+// 动态获取 WebSocket URL - 总是在客户端运行时计算
 const getCurrentWsUrl = () => {
   if (typeof window !== 'undefined') {
     // 检查是否是 Next.js 开发服务器（端口 3000 或 3001）
@@ -40,8 +40,8 @@ const getCurrentWsUrl = () => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     return `${protocol}//${window.location.host}/ws/p2p`;
   }
-  // 服务器端默认值
-  return 'ws://localhost:8080/ws/p2p';
+  // 服务器端返回空字符串，强制在客户端计算
+  return '';
 };
 
 export const config = {
@@ -61,8 +61,8 @@ export const config = {
     // 直接后端URL (客户端在静态模式下使用) - 如果环境变量为空，则使用当前域名
     directBackendUrl: getEnv('NEXT_PUBLIC_BACKEND_URL') || getCurrentBaseUrl(),
     
-    // WebSocket地址 - 如果环境变量为空，则使用当前域名构建
-    wsUrl: getEnv('NEXT_PUBLIC_WS_URL') || getCurrentWsUrl(),
+    // WebSocket地址 - 在客户端运行时动态计算，不在构建时预设
+    wsUrl: '', // 将通过 getWsUrl() 函数动态获取
   },
   
   // 超时配置
@@ -113,12 +113,23 @@ export function getDirectBackendUrl(path: string): string {
 }
 
 /**
- * 获取WebSocket URL
+ * 获取WebSocket URL - 总是在客户端运行时动态计算
  * @returns WebSocket连接地址
  */
 export function getWsUrl(): string {
-  // 实时获取当前域名构建的 WebSocket URL
-  return getEnv('NEXT_PUBLIC_WS_URL') || getCurrentWsUrl()
+  // 优先使用环境变量
+  const envWsUrl = getEnv('NEXT_PUBLIC_WS_URL');
+  if (envWsUrl) {
+    return envWsUrl;
+  }
+  
+  // 如果是服务器端（SSG构建时），返回空字符串
+  if (typeof window === 'undefined') {
+    return '';
+  }
+  
+  // 客户端运行时动态计算
+  return getCurrentWsUrl();
 }
 
 /**

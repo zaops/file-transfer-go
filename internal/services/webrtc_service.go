@@ -138,8 +138,33 @@ func (ws *WebRTCService) addClientToRoom(code string, client *WebRTCClient) {
 
 	if client.Role == "sender" {
 		room.Sender = client
+		// 如果发送方连接，检查是否有接收方在等待，通知接收方
+		if room.Receiver != nil {
+			log.Printf("通知接收方：发送方已连接")
+			peerJoinedMsg := &WebRTCMessage{
+				Type: "peer-joined",
+				From: client.ID,
+				Payload: map[string]interface{}{
+					"role": "sender",
+				},
+			}
+			room.Receiver.Connection.WriteJSON(peerJoinedMsg)
+		}
 	} else {
 		room.Receiver = client
+		// 如果接收方连接，通知发送方可以开始建立P2P连接
+		if room.Sender != nil {
+			log.Printf("通知发送方：接收方已连接，可以开始建立P2P连接")
+			peerJoinedMsg := &WebRTCMessage{
+				Type: "peer-joined",
+				From: client.ID,
+				Payload: map[string]interface{}{
+					"role": "receiver",
+				},
+			}
+			room.Sender.Connection.WriteJSON(peerJoinedMsg)
+		}
+
 		// 如果接收方连接，且有保存的offer，立即发送给接收方
 		if room.LastOffer != nil {
 			log.Printf("向新连接的接收方发送保存的offer")

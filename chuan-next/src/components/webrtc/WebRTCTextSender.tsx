@@ -38,11 +38,9 @@ export const WebRTCTextSender: React.FC<WebRTCTextSenderProps> = ({ onRestart, o
   // 连接所有传输通道
   const connectAll = useCallback(async (code: string, role: 'sender' | 'receiver') => {
     console.log('=== 连接所有传输通道 ===', { code, role });
-    await Promise.all([
-      textTransfer.connect(code, role),
-      fileTransfer.connect(code, role)
-    ]);
-  }, [textTransfer, fileTransfer]);
+    // 只需要连接一次，因为使用的是共享连接
+    await connection.connect(code, role);
+  }, [connection]);
 
   // 是否有任何连接
   const hasAnyConnection = textTransfer.isConnected || fileTransfer.isConnected;
@@ -63,9 +61,8 @@ export const WebRTCTextSender: React.FC<WebRTCTextSenderProps> = ({ onRestart, o
     sentImages.forEach(img => URL.revokeObjectURL(img.url));
     setSentImages([]);
     
-    // 断开连接
-    textTransfer.disconnect();
-    fileTransfer.disconnect();
+    // 断开连接（只需要断开一次）
+    connection.disconnect();
     
     if (onRestart) {
       onRestart();
@@ -141,7 +138,7 @@ export const WebRTCTextSender: React.FC<WebRTCTextSenderProps> = ({ onRestart, o
       // 如果有初始文本，发送它
       if (currentText) {
         setTimeout(() => {
-          if (textTransfer.isConnected) {
+          if (connection.isPeerConnected && textTransfer.isConnected) {
             // 发送实时文本同步
             textTransfer.sendTextSync(currentText);
             
@@ -171,8 +168,8 @@ export const WebRTCTextSender: React.FC<WebRTCTextSenderProps> = ({ onRestart, o
     const newHeight = Math.min(Math.max(textarea.scrollHeight, 100), 300); // 最小100px，最大300px
     textarea.style.height = `${newHeight}px`;
     
-    // 实时同步文本内容（如果已连接）
-    if (textTransfer.isConnected) {
+    // 实时同步文本内容（如果P2P连接已建立）
+    if (connection.isPeerConnected && textTransfer.isConnected) {
       // 发送实时文本同步
       textTransfer.sendTextSync(value);
       
@@ -215,9 +212,11 @@ export const WebRTCTextSender: React.FC<WebRTCTextSenderProps> = ({ onRestart, o
     }]);
     
     // 发送文件
-    if (fileTransfer.isConnected) {
+    if (connection.isPeerConnected && fileTransfer.isConnected) {
       fileTransfer.sendFile(file);
       showToast('图片发送中...', "success");
+    } else if (!connection.isPeerConnected) {
+      showToast('等待对方加入P2P网络...', "error");
     } else {
       showToast('请先连接到房间', "error");
     }
@@ -409,8 +408,16 @@ export const WebRTCTextSender: React.FC<WebRTCTextSenderProps> = ({ onRestart, o
               value={textInput}
               onChange={handleTextInputChange}
               onPaste={handlePaste}
-              placeholder="在这里编辑文字内容...&#10;&#10;💡 支持实时同步编辑，对方可以看到你的修改&#10;💡 可以直接粘贴图片 (Ctrl+V)"
-              className="w-full h-40 px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-slate-700 placeholder-slate-400"
+              disabled={!connection.isPeerConnected}
+              placeholder={connection.isPeerConnected 
+                ? "在这里编辑文字内容...&#10;&#10;💡 支持实时同步编辑，对方可以看到你的修改&#10;💡 可以直接粘贴图片 (Ctrl+V)"
+                : "等待对方加入P2P网络...&#10;&#10;📡 建立连接后即可开始输入文字"
+              }
+              className={`w-full h-40 px-4 py-3 border rounded-lg resize-none text-slate-700 ${
+                connection.isPeerConnected 
+                  ? "border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-slate-400" 
+                  : "border-slate-200 bg-slate-50 cursor-not-allowed placeholder-slate-300"
+              }`}
             />
             
             <div className="flex items-center justify-between mt-3">
@@ -419,7 +426,10 @@ export const WebRTCTextSender: React.FC<WebRTCTextSenderProps> = ({ onRestart, o
                   onClick={() => fileInputRef.current?.click()}
                   variant="outline"
                   size="sm"
-                  className="flex items-center space-x-1"
+                  disabled={!connection.isPeerConnected}
+                  className={`flex items-center space-x-1 ${
+                    !connection.isPeerConnected ? 'cursor-not-allowed opacity-50' : ''
+                  }`}
                 >
                   <Image className="w-4 h-4" />
                   <span>添加图片</span>

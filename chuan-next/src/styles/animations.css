@@ -1,0 +1,66 @@
+/* 动画样式 */
+@keyframes fade-in-up {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.5s ease-out;
+}
+
+/* 自定义滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.4);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(156, 163, 175, 0.6);
+}
+
+/* 全屏时隐藏鼠标（桌面共享专用） */
+.cursor-none {
+  cursor: none;
+}
+
+.cursor-none:hover {
+  cursor: none;
+}
+
+/* 桌面共享控制栏过渡 */
+.desktop-controls-enter {
+  opacity: 0;
+  transform: translateY(100%);
+}
+
+.desktop-controls-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 300ms ease-in-out, transform 300ms ease-in-out;
+}
+
+.desktop-controls-exit {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.desktop-controls-exit-active {
+  opacity: 0;
+  transform: translateY(100%);
+  transition: opacity 300ms ease-in-out, transform 300ms ease-in-out;
+}
