@@ -1,19 +1,21 @@
 "use client";
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Monitor, Square } from 'lucide-react';
 import { useToast } from '@/components/ui/toast-simple';
 import { useDesktopShareBusiness } from '@/hooks/webrtc/useDesktopShareBusiness';
 import DesktopViewer from '@/components/DesktopViewer';
+import { ConnectionStatus } from '@/components/ConnectionStatus';
 
 interface WebRTCDesktopReceiverProps {
   className?: string;
   initialCode?: string; // 支持从URL参数传入的房间代码
+  onConnectionChange?: (connection: any) => void;
 }
 
-export default function WebRTCDesktopReceiver({ className, initialCode }: WebRTCDesktopReceiverProps) {
+export default function WebRTCDesktopReceiver({ className, initialCode, onConnectionChange }: WebRTCDesktopReceiverProps) {
   const [inputCode, setInputCode] = useState(initialCode || '');
   const [isLoading, setIsLoading] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
@@ -22,6 +24,13 @@ export default function WebRTCDesktopReceiver({ className, initialCode }: WebRTC
 
   // 使用桌面共享业务逻辑
   const desktopShare = useDesktopShareBusiness();
+
+  // 通知父组件连接状态变化
+  useEffect(() => {
+    if (onConnectionChange && desktopShare.webRTCConnection) {
+      onConnectionChange(desktopShare.webRTCConnection);
+    }
+  }, [onConnectionChange, desktopShare.isWebSocketConnected, desktopShare.isPeerConnected, desktopShare.isConnecting]);
 
   // 加入观看
   const handleJoinViewing = useCallback(async () => {
@@ -108,8 +117,8 @@ export default function WebRTCDesktopReceiver({ className, initialCode }: WebRTC
           {!desktopShare.isViewing ? (
             // 输入房间代码界面 - 与文本消息风格一致
             <div>
-              <div className="flex items-center mb-6 sm:mb-8">
-                <div className="flex items-center space-x-3 flex-1">
+              <div className="flex items-center justify-between mb-6 sm:mb-8">
+                <div className="flex items-center space-x-3">
                   <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-indigo-500 rounded-xl flex items-center justify-center">
                     <Monitor className="w-5 h-5 text-white" />
                   </div>
@@ -118,6 +127,10 @@ export default function WebRTCDesktopReceiver({ className, initialCode }: WebRTC
                     <p className="text-sm text-slate-600">请输入6位房间代码来观看桌面共享</p>
                   </div>
                 </div>
+                
+                <ConnectionStatus 
+                  currentRoom={desktopShare.connectionCode ? { code: desktopShare.connectionCode, role: 'receiver' } : null}
+                />
               </div>
 
               <form onSubmit={(e) => { e.preventDefault(); handleJoinViewing(); }} className="space-y-4 sm:space-y-6">
@@ -161,24 +174,21 @@ export default function WebRTCDesktopReceiver({ className, initialCode }: WebRTC
           ) : (
             // 已连接，显示桌面观看界面
             <div className="space-y-6">
-              <div className="flex items-center mb-6">
-                <div className="flex items-center space-x-3 flex-1">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center space-x-3">
                   <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-xl flex items-center justify-center">
                     <Monitor className="w-5 h-5 text-white" />
                   </div>
                   <div>
                     <h3 className="text-lg font-semibold text-slate-800">桌面观看</h3>
-                    <p className="text-sm text-slate-500">
-                      <span className="text-emerald-600">✅ 已连接，正在观看桌面共享</span>
-                    </p>
+                    <p className="text-sm text-slate-600">房间代码: {inputCode}</p>
                   </div>
                 </div>
-              </div>
 
-              {/* 连接成功状态 */}
-              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-6">
-                <h4 className="font-semibold text-emerald-800 mb-1">已连接到桌面共享房间</h4>
-                <p className="text-emerald-700">房间代码: {inputCode}</p>
+                {/* 连接状态 */}
+                <ConnectionStatus 
+                  currentRoom={{ code: inputCode, role: 'receiver' }}
+                />
               </div>
 
               {/* 观看中的控制面板 */}
@@ -225,49 +235,6 @@ export default function WebRTCDesktopReceiver({ className, initialCode }: WebRTC
             </div>
           )}
         </div>
-      </div>
-
-      {/* 错误显示 */}
-      {desktopShare.error && (
-        <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-          <p className="text-red-600 text-sm">{desktopShare.error}</p>
-        </div>
-      )}
-
-      {/* 调试信息 */}
-      <div className="mt-6">
-        <button
-          onClick={() => setShowDebug(!showDebug)}
-          className="text-xs text-gray-500 hover:text-gray-700"
-        >
-          {showDebug ? '隐藏' : '显示'}调试信息
-        </button>
-        
-        {showDebug && (
-          <div className="mt-2 p-3 bg-gray-50 rounded text-xs text-gray-600 space-y-1">
-            <div>WebSocket连接: {desktopShare.isWebSocketConnected ? '✅' : '❌'}</div>
-            <div>P2P连接: {desktopShare.isPeerConnected ? '✅' : '❌'}</div>
-            <div>观看状态: {desktopShare.isViewing ? '观看中' : '未观看'}</div>
-            <div>远程流: {desktopShare.remoteStream ? '已接收' : '无'}</div>
-            {desktopShare.remoteStream && (
-              <div>
-                <div>流轨道数量: {desktopShare.remoteStream.getTracks().length}</div>
-                <div>视频轨道: {desktopShare.remoteStream.getVideoTracks().length}</div>
-                <div>音频轨道: {desktopShare.remoteStream.getAudioTracks().length}</div>
-                {desktopShare.remoteStream.getVideoTracks().map((track, index) => (
-                  <div key={index}>
-                    视频轨道{index}: {track.readyState}, enabled: {track.enabled ? '是' : '否'}
-                  </div>
-                ))}
-                {desktopShare.remoteStream.getAudioTracks().map((track, index) => (
-                  <div key={index}>
-                    音频轨道{index}: {track.readyState}, enabled: {track.enabled ? '是' : '否'}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );

@@ -1,24 +1,31 @@
 "use client";
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Share, Monitor, Copy, Play, Square, Repeat, Users, Wifi, WifiOff } from 'lucide-react';
 import { useToast } from '@/components/ui/toast-simple';
 import { useDesktopShareBusiness } from '@/hooks/webrtc/useDesktopShareBusiness';
-import QRCodeDisplay from '@/components/QRCodeDisplay';
 import RoomInfoDisplay from '@/components/RoomInfoDisplay';
+import { ConnectionStatus } from '@/components/ConnectionStatus';
 
 interface WebRTCDesktopSenderProps {
   className?: string;
+  onConnectionChange?: (connection: any) => void;
 }
 
-export default function WebRTCDesktopSender({ className }: WebRTCDesktopSenderProps) {
+export default function WebRTCDesktopSender({ className, onConnectionChange }: WebRTCDesktopSenderProps) {
   const [isLoading, setIsLoading] = useState(false);
-  const [showDebug, setShowDebug] = useState(false);
   const { showToast } = useToast();
 
   // 使用桌面共享业务逻辑
   const desktopShare = useDesktopShareBusiness();
+
+  // 通知父组件连接状态变化
+  useEffect(() => {
+    if (onConnectionChange && desktopShare.webRTCConnection) {
+      onConnectionChange(desktopShare.webRTCConnection);
+    }
+  }, [onConnectionChange, desktopShare.isWebSocketConnected, desktopShare.isPeerConnected, desktopShare.isConnecting]);
 
   // 复制房间代码
   const copyCode = useCallback(async (code: string) => {
@@ -114,8 +121,8 @@ export default function WebRTCDesktopSender({ className }: WebRTCDesktopSenderPr
           // 创建房间前的界面
           <div className="space-y-6">
             {/* 功能标题和状态 */}
-            <div className="flex items-center mb-6">
-              <div className="flex items-center space-x-3 flex-1">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center space-x-3">
                 <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-indigo-500 rounded-xl flex items-center justify-center">
                   <Monitor className="w-5 h-5 text-white" />
                 </div>
@@ -125,36 +132,16 @@ export default function WebRTCDesktopSender({ className }: WebRTCDesktopSenderPr
                 </div>
               </div>
               
-              {/* 竖线分割 */}
-              <div className="w-px h-12 bg-slate-200 mx-4"></div>
-              
-              {/* 状态显示 */}
-              <div className="text-right">
-                <div className="text-sm text-slate-500 mb-1">连接状态</div>
-                <div className="flex items-center justify-end space-x-3 text-sm">
-                  {/* WebSocket状态 */}
-                  <div className="flex items-center space-x-1">
-                    <div className={`w-2 h-2 rounded-full ${desktopShare.isWebSocketConnected ? 'bg-blue-500 animate-pulse' : 'bg-slate-400'}`}></div>
-                    <span className={desktopShare.isWebSocketConnected ? 'text-blue-600' : 'text-slate-600'}>WS</span>
-                  </div>
-                  
-                  {/* 分隔符 */}
-                  <div className="text-slate-300">|</div>
-                  
-                  {/* WebRTC状态 */}
-                  <div className="flex items-center space-x-1">
-                    <div className={`w-2 h-2 rounded-full ${desktopShare.isPeerConnected ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`}></div>
-                    <span className={desktopShare.isPeerConnected ? 'text-emerald-600' : 'text-slate-600'}>RTC</span>
-                  </div>
-                </div>
-              </div>
+              <ConnectionStatus 
+                currentRoom={desktopShare.connectionCode ? { code: desktopShare.connectionCode, role: 'sender' } : null}
+              />
             </div>
 
             <div className="text-center py-12">
               <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-purple-100 to-indigo-100 rounded-full flex items-center justify-center">
                 <Monitor className="w-10 h-10 text-purple-500" />
               </div>
-              <h3 className="text-xl font-semibold text-slate-800 mb-4">创建桌面共享房间</h3>
+              <h3 className="text-lg font-semibold text-slate-800 mb-4">创建桌面共享房间</h3>
               <p className="text-slate-600 mb-8">创建房间后将生成分享码，等待接收方加入后即可开始桌面共享</p>
               
               <Button
@@ -180,44 +167,20 @@ export default function WebRTCDesktopSender({ className }: WebRTCDesktopSenderPr
           // 房间已创建，显示取件码和等待界面
           <div className="space-y-6">
             {/* 功能标题和状态 */}
-            <div className="flex items-center mb-6">
-              <div className="flex items-center space-x-3 flex-1">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center space-x-3">
                 <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-indigo-500 rounded-xl flex items-center justify-center">
                   <Monitor className="w-5 h-5 text-white" />
                 </div>
                 <div>
                   <h2 className="text-lg font-semibold text-slate-800">共享桌面</h2>
-                  <p className="text-sm text-slate-600">
-                    {desktopShare.isPeerConnected ? '✅ 接收方已连接，现在可以开始共享桌面' : 
-                     desktopShare.isWebSocketConnected ? '⏳ 房间已创建，等待接收方加入建立P2P连接' : 
-                     '⚠️ 等待连接'}
-                  </p>
+                  <p className="text-sm text-slate-600">房间代码: {desktopShare.connectionCode}</p>
                 </div>
               </div>
               
-              {/* 竖线分割 */}
-              <div className="w-px h-12 bg-slate-200 mx-4"></div>
-              
-              {/* 状态显示 */}
-              <div className="text-right">
-                <div className="text-sm text-slate-500 mb-1">连接状态</div>
-                <div className="flex items-center justify-end space-x-3 text-sm">
-                  {/* WebSocket状态 */}
-                  <div className="flex items-center space-x-1">
-                    <div className={`w-2 h-2 rounded-full ${desktopShare.isWebSocketConnected ? 'bg-blue-500 animate-pulse' : 'bg-red-500'}`}></div>
-                    <span className={desktopShare.isWebSocketConnected ? 'text-blue-600' : 'text-red-600'}>WS</span>
-                  </div>
-                  
-                  {/* 分隔符 */}
-                  <div className="text-slate-300">|</div>
-                  
-                  {/* WebRTC状态 */}
-                  <div className="flex items-center space-x-1">
-                    <div className={`w-2 h-2 rounded-full ${desktopShare.isPeerConnected ? 'bg-emerald-500 animate-pulse' : 'bg-orange-400'}`}></div>
-                    <span className={desktopShare.isPeerConnected ? 'text-emerald-600' : 'text-orange-600'}>RTC</span>
-                  </div>
-                </div>
-              </div>
+              <ConnectionStatus 
+                currentRoom={{ code: desktopShare.connectionCode, role: 'sender' }}
+              />
             </div>
 
             {/* 桌面共享控制区域 */}
@@ -322,32 +285,6 @@ export default function WebRTCDesktopSender({ className }: WebRTCDesktopSenderPr
         )}
       </div>
 
-      {/* 错误显示 */}
-      {desktopShare.error && (
-        <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-          <p className="text-red-600 text-sm">{desktopShare.error}</p>
-        </div>
-      )}
-
-      {/* 调试信息 */}
-      <div className="mt-6">
-        <button
-          onClick={() => setShowDebug(!showDebug)}
-          className="text-xs text-gray-500 hover:text-gray-700"
-        >
-          {showDebug ? '隐藏' : '显示'}调试信息
-        </button>
-        
-        {showDebug && (
-          <div className="mt-2 p-3 bg-gray-50 rounded text-xs text-gray-600 space-y-1">
-            <div>WebSocket连接: {desktopShare.isWebSocketConnected ? '✅' : '❌'}</div>
-            <div>P2P连接: {desktopShare.isPeerConnected ? '✅' : '❌'}</div>
-            <div>房间代码: {desktopShare.connectionCode || '未创建'}</div>
-            <div>共享状态: {desktopShare.isSharing ? '进行中' : '未共享'}</div>
-            <div>等待对方: {desktopShare.isWaitingForPeer ? '是' : '否'}</div>
-          </div>
-        )}
-      </div>
     </div>
   );
 }

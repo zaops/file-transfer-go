@@ -408,5 +408,8 @@ export function useDesktopShareBusiness() {
 
     // WebRTC连接状态
     webRTCError: webRTC.error,
+    
+    // 暴露WebRTC连接对象
+    webRTCConnection: webRTC,
   };
 }

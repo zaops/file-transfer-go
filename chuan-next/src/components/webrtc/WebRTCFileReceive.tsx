@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Download, FileText, Image, Video, Music, Archive } from 'lucide-react';
 import { useToast } from '@/components/ui/toast-simple';
+import { ConnectionStatus } from '@/components/ConnectionStatus';
 
 interface FileInfo {
   id: string;
@@ -133,63 +134,31 @@ export function WebRTCFileReceive({
     return (
       <div>
         {/* 功能标题和状态 */}
-        <div className="flex items-center mb-6">
-          <div className="flex items-center space-x-3 flex-1">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-xl flex items-center justify-center">
-              <Download className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold text-slate-800">等待文件</h2>
-              <p className="text-sm text-slate-600">
-                {isConnected ? '已连接到房间，等待发送方选择文件...' : '正在连接到房间...'}
-              </p>
-            </div>
-          </div>
-          
-          {/* 竖线分割 */}
-          <div className="w-px h-12 bg-slate-200 mx-4"></div>
-          
-          {/* 状态显示 */}
-          <div className="text-right">
-            <div className="text-sm text-slate-500 mb-1">连接状态</div>
-            <div className="flex items-center justify-end space-x-3 text-sm">
-              {/* WebSocket状态 */}
-              <div className="flex items-center space-x-1">
-                {isWebSocketConnected ? (
-                  <>
-                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                    <span className="text-emerald-600">WS</span>
-                  </>
-                ) : (
-                  <>
-                    <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></div>
-                    <span className="text-orange-600">WS</span>
-                  </>
-                )}
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center">
+                <Download className="w-5 h-5 text-white" />
               </div>
-              
-              {/* 分隔符 */}
-              <div className="text-slate-300">|</div>
-              
-              {/* WebRTC状态 */}
-              <div className="flex items-center space-x-1">
-                {isConnected ? (
-                  <>
-                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                    <span className="text-emerald-600">RTC</span>
-                  </>
-                ) : (
-                  <>
-                    <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></div>
-                    <span className="text-orange-600">RTC</span>
-                  </>
-                )}
+              <div>
+                <h3 className="text-lg font-semibold text-slate-800">文件接收中</h3>
+                <p className="text-sm text-slate-600">取件码: {pickupCode}</p>
               </div>
             </div>
-          </div>
-        </div>
-        
-        <div className="text-center">
+            
+            <div className="flex items-center space-x-4">
+              <ConnectionStatus 
+                currentRoom={pickupCode ? { code: pickupCode, role: 'receiver' } : null}
+              />
+              
+              <Button
+                onClick={onReset}
+                variant="outline"
+                className="text-slate-600 hover:text-slate-800 border-slate-200 hover:border-slate-300"
+              >
+                重新开始
+              </Button>
+            </div>
+          </div>        <div className="text-center">
           {/* 连接状态指示器 */}
           <div className="flex items-center justify-center space-x-4 mb-6">
             <div className="flex items-center">
@@ -226,67 +195,22 @@ export function WebRTCFileReceive({
     return (
       <div className="space-y-4 sm:space-y-6">
         {/* 功能标题和状态 */}
-        <div className="flex items-center">
-          <div className="flex items-center space-x-3 flex-1">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center space-x-3">
             <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-xl flex items-center justify-center">
               <Download className="w-5 h-5 text-white" />
             </div>
             <div>
               <h3 className="text-lg font-semibold text-slate-800">可下载文件</h3>
-              <p className="text-sm text-slate-500">
-                {isConnected ? (
-                  <span className="text-emerald-600">✅ 已连接，可以下载文件</span>
-                ) : (
-                  <span className="text-amber-600">⏳ 正在建立连接...</span>
-                )}
-              </p>
+              <p className="text-sm text-slate-600">房间代码: {pickupCode}</p>
             </div>
           </div>
           
-          {/* 竖线分割 */}
-          <div className="w-px h-12 bg-slate-200 mx-4"></div>
-          
-          {/* 状态显示 */}
-          <div className="text-right">
-            <div className="text-sm text-slate-500 mb-1">连接状态</div>
-            <div className="flex items-center justify-end space-x-3 text-sm">
-              {/* WebSocket状态 */}
-              <div className="flex items-center space-x-1">
-                {isWebSocketConnected ? (
-                  <>
-                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                    <span className="text-emerald-600">WS</span>
-                  </>
-                ) : (
-                  <>
-                    <div className="w-2 h-2 rounded-full bg-slate-400"></div>
-                    <span className="text-slate-600">WS</span>
-                  </>
-                )}
-              </div>
-              
-              {/* 分隔符 */}
-              <div className="text-slate-300">|</div>
-              
-              {/* WebRTC状态 */}
-              <div className="flex items-center space-x-1">
-                {isConnected ? (
-                  <>
-                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                    <span className="text-emerald-600">RTC</span>
-                  </>
-                ) : (
-                  <>
-                    <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></div>
-                    <span className="text-orange-600">RTC</span>
-                  </>
-                )}
-              </div>
-            </div>
-            <div className="mt-1 text-xs text-slate-400">
-              {files.length} 个文件
-            </div>
-          </div>
+          {/* 连接状态 */}
+          <ConnectionStatus 
+
+            currentRoom={{ code: pickupCode, role: 'receiver' }}
+          />
         </div>
         
         <div>
@@ -371,8 +295,8 @@ export function WebRTCFileReceive({
   return (
     <div>
       {/* 功能标题和状态 */}
-      <div className="flex items-center mb-6 sm:mb-8">
-        <div className="flex items-center space-x-3 flex-1">
+      <div className="flex items-center justify-between mb-6 sm:mb-8">
+        <div className="flex items-center space-x-3">
           <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-xl flex items-center justify-center">
             <Download className="w-5 h-5 text-white" />
           </div>
@@ -382,57 +306,10 @@ export function WebRTCFileReceive({
           </div>
         </div>
         
-        {/* 竖线分割 */}
-        <div className="w-px h-12 bg-slate-200 mx-4"></div>
-        
-        {/* 状态显示 */}
-        <div className="text-right">
-          <div className="text-sm text-slate-500 mb-1">连接状态</div>
-          <div className="flex items-center justify-end space-x-3 text-sm">
-            {/* WebSocket状态 */}
-            <div className="flex items-center space-x-1">
-              {isConnecting ? (
-                <>
-                  <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></div>
-                  <span className="text-orange-600">WS</span>
-                </>
-              ) : isWebSocketConnected ? (
-                <>
-                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                  <span className="text-emerald-600">WS</span>
-                </>
-              ) : (
-                <>
-                  <div className="w-2 h-2 rounded-full bg-slate-400"></div>
-                  <span className="text-slate-600">WS</span>
-                </>
-              )}
-            </div>
-            
-            {/* 分隔符 */}
-            <div className="text-slate-300">|</div>
-            
-            {/* WebRTC状态 */}
-            <div className="flex items-center space-x-1">
-              {isConnected ? (
-                <>
-                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                  <span className="text-emerald-600">RTC</span>
-                </>
-              ) : isConnecting ? (
-                <>
-                  <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></div>
-                  <span className="text-orange-600">RTC</span>
-                </>
-              ) : (
-                <>
-                  <div className="w-2 h-2 rounded-full bg-slate-400"></div>
-                  <span className="text-slate-600">RTC</span>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
+        {/* 连接状态 */}
+        <ConnectionStatus 
+          currentRoom={null}
+        />
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">

@@ -7,15 +7,16 @@ import { useFileTransferBusiness } from '@/hooks/webrtc/useFileTransferBusiness'
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast-simple';
 import { MessageSquare, Image, Send, Copy } from 'lucide-react';
-import QRCodeDisplay from '@/components/QRCodeDisplay';
 import RoomInfoDisplay from '@/components/RoomInfoDisplay';
+import { ConnectionStatus } from '@/components/ConnectionStatus';
 
 interface WebRTCTextSenderProps {
   onRestart?: () => void;
   onPreviewImage?: (imageUrl: string) => void;
+  onConnectionChange?: (connection: any) => void;
 }
 
-export const WebRTCTextSender: React.FC<WebRTCTextSenderProps> = ({ onRestart, onPreviewImage }) => {
+export const WebRTCTextSender: React.FC<WebRTCTextSenderProps> = ({ onRestart, onPreviewImage, onConnectionChange }) => {
   const { showToast } = useToast();
   
   // 状态管理
@@ -48,6 +49,13 @@ export const WebRTCTextSender: React.FC<WebRTCTextSenderProps> = ({ onRestart, o
   
   // 是否正在连接
   const isAnyConnecting = textTransfer.isConnecting || fileTransfer.isConnecting;
+
+  // 通知父组件连接状态变化
+  useEffect(() => {
+    if (onConnectionChange) {
+      onConnectionChange(connection);
+    }
+  }, [onConnectionChange, connection.isConnected, connection.isConnecting, connection.isPeerConnected]);
 
   // 是否有任何错误
   const hasAnyError = textTransfer.connectionError || fileTransfer.connectionError;
@@ -287,36 +295,17 @@ export const WebRTCTextSender: React.FC<WebRTCTextSenderProps> = ({ onRestart, o
               </div>
             </div>
             
-            {/* 竖线分割 */}
-            <div className="w-px h-12 bg-slate-200 mx-4"></div>
-            
-            {/* 状态显示 */}
-            <div className="text-right">
-              <div className="text-sm text-slate-500 mb-1">连接状态</div>
-              <div className="flex items-center justify-end space-x-3 text-sm">
-                {/* WebSocket状态 */}
-                <div className="flex items-center space-x-1">
-                  <div className={`w-2 h-2 rounded-full ${textTransfer.isWebSocketConnected ? 'bg-blue-500 animate-pulse' : 'bg-slate-400'}`}></div>
-                  <span className={textTransfer.isWebSocketConnected ? 'text-blue-600' : 'text-slate-600'}>WS</span>
-                </div>
-                
-                {/* 分隔符 */}
-                <div className="text-slate-300">|</div>
-                
-                {/* WebRTC状态 */}
-                <div className="flex items-center space-x-1">
-                  <div className={`w-2 h-2 rounded-full ${textTransfer.isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`}></div>
-                  <span className={textTransfer.isConnected ? 'text-emerald-600' : 'text-slate-600'}>RTC</span>
-                </div>
-              </div>
-            </div>
+            {/* 连接状态 */}
+            <ConnectionStatus 
+              currentRoom={pickupCode ? { code: pickupCode, role: 'sender' } : null}
+            />
           </div>
 
           <div className="text-center py-12">
             <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-full flex items-center justify-center">
               <MessageSquare className="w-10 h-10 text-blue-500" />
             </div>
-            <h3 className="text-xl font-semibold text-slate-800 mb-4">创建文字传输房间</h3>
+            <h3 className="text-lg font-semibold text-slate-800 mb-4">创建文字传输房间</h3>
             <p className="text-slate-600 mb-8">创建房间后可以实时同步文字内容</p>
             
             <Button
@@ -342,45 +331,22 @@ export const WebRTCTextSender: React.FC<WebRTCTextSenderProps> = ({ onRestart, o
         // 房间已创建，显示取件码和文本传输界面
         <div className="space-y-6">
           {/* 功能标题和状态 */}
-          <div className="flex items-center mb-6">
-            <div className="flex items-center space-x-3 flex-1">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-xl flex items-center justify-center">
-                <MessageSquare className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold text-slate-800">传送文字</h2>
-                <p className="text-sm text-slate-600">
-                  {hasAnyConnection ? '实时编辑，对方可以同步看到' : '等待对方连接'}
-                </p>
-              </div>
-            </div>
-            
-            {/* 竖线分割 */}
-            <div className="w-px h-12 bg-slate-200 mx-4"></div>
-            
-            {/* 状态显示 */}
-            <div className="text-right">
-              <div className="text-sm text-slate-500 mb-1">连接状态</div>
-              <div className="flex items-center justify-end space-x-3 text-sm">
-                {/* WebSocket状态 */}
-                <div className="flex items-center space-x-1">
-                  <div className={`w-2 h-2 rounded-full ${textTransfer.isWebSocketConnected ? 'bg-blue-500 animate-pulse' : 'bg-red-500'}`}></div>
-                  <span className={textTransfer.isWebSocketConnected ? 'text-blue-600' : 'text-red-600'}>WS</span>
-                </div>
-                
-                {/* 分隔符 */}
-                <div className="text-slate-300">|</div>
-                
-                {/* WebRTC状态 */}
-                <div className="flex items-center space-x-1">
-                  <div className={`w-2 h-2 rounded-full ${textTransfer.isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-orange-400'}`}></div>
-                  <span className={textTransfer.isConnected ? 'text-emerald-600' : 'text-orange-600'}>RTC</span>
-                </div>
-              </div>
-            </div>
+      {/* 功能标题和状态 */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center space-x-3">
+          <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-teal-500 rounded-xl flex items-center justify-center">
+            <MessageSquare className="w-5 h-5 text-white" />
           </div>
-
-          {/* 文字编辑区域 - 移到最上面 */}
+          <div>
+            <h2 className="text-lg font-semibold text-slate-800">发送文本</h2>
+            <p className="text-sm text-slate-600">输入您想要传输的文本内容</p>
+          </div>
+        </div>
+        
+        <ConnectionStatus 
+          currentRoom={pickupCode ? { code: pickupCode, role: 'sender' } : null}
+        />
+      </div>          {/* 文字编辑区域 - 移到最上面 */}
           <div className="bg-white/80 backdrop-blur-sm rounded-xl p-4 border border-slate-200">
             <div className="flex items-center justify-between mb-3">
               <h4 className="text-lg font-medium text-slate-800 flex items-center">

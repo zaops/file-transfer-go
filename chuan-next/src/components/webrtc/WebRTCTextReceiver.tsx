@@ -8,17 +8,20 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/toast-simple';
 import { MessageSquare, Image, Download } from 'lucide-react';
+import { ConnectionStatus } from '@/components/ConnectionStatus';
 
 interface WebRTCTextReceiverProps {
   initialCode?: string;
   onPreviewImage: (imageUrl: string) => void;
   onRestart?: () => void;
+  onConnectionChange?: (connection: any) => void;
 }
 
 export const WebRTCTextReceiver: React.FC<WebRTCTextReceiverProps> = ({
   initialCode = '',
   onPreviewImage,
-  onRestart
+  onRestart,
+  onConnectionChange
 }) => {
   const { showToast } = useToast();
 
@@ -29,12 +32,13 @@ export const WebRTCTextReceiver: React.FC<WebRTCTextReceiverProps> = ({
   const [receivedImages, setReceivedImages] = useState<Array<{ id: string, content: string, fileName?: string }>>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
+  
+  // Ref用于防止重复自动连接
   const hasTriedAutoConnect = useRef(false);
 
-
-  // 创建共享连接 [需要优化]
+  // 创建共享连接
   const connection = useSharedWebRTCManager();
-
+  
   // 使用共享连接创建业务层
   const textTransfer = useTextTransferBusiness(connection);
   const fileTransfer = useFileTransferBusiness(connection);
@@ -42,115 +46,48 @@ export const WebRTCTextReceiver: React.FC<WebRTCTextReceiverProps> = ({
   // 连接所有传输通道
   const connectAll = useCallback(async (code: string, role: 'sender' | 'receiver') => {
     console.log('=== 连接所有传输通道 ===', { code, role });
+    // 只需要连接一次，因为使用的是共享连接
     await connection.connect(code, role);
-    // await Promise.all([
-    //     textTransfer.connect(code, role),
-    //     fileTransfer.connect(code, role)
-    // ]);
-  }, [textTransfer, fileTransfer]);
+  }, [connection]);
 
   // 是否有任何连接
   const hasAnyConnection = textTransfer.isConnected || fileTransfer.isConnected;
-
+  
   // 是否正在连接
   const isAnyConnecting = textTransfer.isConnecting || fileTransfer.isConnecting;
 
+  // 通知父组件连接状态变化
+  useEffect(() => {
+    if (onConnectionChange) {
+      onConnectionChange(connection);
+    }
+  }, [onConnectionChange, connection.isConnected, connection.isConnecting, connection.isPeerConnected]);
 
   // 是否有任何错误
   const hasAnyError = textTransfer.connectionError || fileTransfer.connectionError;
-
-  // 监听连接错误并显示 toast
-  useEffect(() => {
-    if (hasAnyError) {
-      console.error('[WebRTCTextReceiver] 连接错误:', hasAnyError);
-      showToast(hasAnyError, 'error');
-    }
-  }, [hasAnyError, showToast]);
-
-  // 验证取件码是否存在
-  const validatePickupCode = async (code: string): Promise<boolean> => {
-    try {
-      setIsValidating(true);
-
-      console.log('开始验证取件码:', code);
-      const response = await fetch(`/api/room-info?code=${code}`);
-      const data = await response.json();
-
-      console.log('验证响应:', { status: response.status, data });
-
-      if (!response.ok || !data.success) {
-        const errorMessage = data.message || '取件码验证失败';
-        showToast(errorMessage, 'error');
-        console.log('验证失败:', errorMessage);
-        return false;
-      }
-
-      console.log('取件码验证成功:', data.room);
-      return true;
-    } catch (error) {
-      console.error('验证取件码时发生错误:', error);
-      const errorMessage = '网络错误，请检查连接后重试';
-      showToast(errorMessage, 'error');
-      return false;
-    } finally {
-      setIsValidating(false);
-    }
-  };
 
   // 重新开始
   const restart = () => {
     setPickupCode('');
     setInputCode('');
     setReceivedText('');
-    setReceivedImages([]);
     setIsTyping(false);
-
-    // 断开连接
+    
+    // 清理接收的图片URL
+    receivedImages.forEach(img => {
+      if (img.content.startsWith('blob:')) {
+        URL.revokeObjectURL(img.content);
+      }
+    });
+    setReceivedImages([]);
+    
+    // 断开连接（只需要断开一次）
     connection.disconnect();
-
+    
     if (onRestart) {
       onRestart();
     }
   };
-
-  // 加入房间
-  const joinRoom = useCallback(async (code: string) => {
-    const trimmedCode = code.trim().toUpperCase();
-
-    if (!trimmedCode || trimmedCode.length !== 6) {
-      showToast('请输入正确的6位取件码', "error");
-      return;
-    }
-
-    if (isAnyConnecting || isValidating) {
-      console.log('已经在连接中，跳过重复请求');
-      return;
-    }
-
-    if (hasAnyConnection) {
-      console.log('已经连接，跳过重复请求');
-      return;
-    }
-
-    try {
-      console.log('=== 开始验证和连接房间 ===', trimmedCode);
-
-      const isValid = await validatePickupCode(trimmedCode);
-      if (!isValid) {
-        return;
-      }
-
-      setPickupCode(trimmedCode);
-      await connectAll(trimmedCode, 'receiver');
-
-      console.log('=== 房间连接成功 ===', trimmedCode);
-      showToast(`成功加入消息房间: ${trimmedCode}`, "success");
-    } catch (error) {
-      console.error('加入房间失败:', error);
-      showToast(error instanceof Error ? error.message : '加入房间失败', "error");
-      setPickupCode('');
-    }
-  }, [isAnyConnecting, hasAnyConnection, connectAll, showToast, isValidating, validatePickupCode]);
 
   // 监听实时文本同步
   useEffect(() => {
@@ -174,25 +111,66 @@ export const WebRTCTextReceiver: React.FC<WebRTCTextReceiverProps> = ({
   useEffect(() => {
     const cleanup = fileTransfer.onFileReceived((fileData) => {
       if (fileData.file.type.startsWith('image/')) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const imageData = e.target?.result as string;
-          setReceivedImages(prev => [...prev, {
-            id: fileData.id,
-            content: imageData,
-            fileName: fileData.file.name
-          }]);
-        };
-        reader.readAsDataURL(fileData.file);
+        const imageUrl = URL.createObjectURL(fileData.file);
+        const imageId = Date.now().toString();
+        
+        setReceivedImages(prev => [...prev, {
+          id: imageId,
+          content: imageUrl,
+          fileName: fileData.file.name
+        }]);
+
+        showToast(`收到图片: ${fileData.file.name}`, "success");
       }
     });
 
     return cleanup;
   }, [fileTransfer.onFileReceived]);
 
+  // 验证并加入房间
+  const joinRoom = useCallback(async (code: string) => {
+    if (!code || code.length !== 6) return;
+    
+    setIsValidating(true);
+    
+    try {
+      console.log('=== 开始加入房间 ===', code);
+      
+      // 验证房间
+      const response = await fetch(`/api/room-info?code=${code}`);
+      const roomData = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(roomData.error || '房间不存在或已过期');
+      }
+
+      console.log('=== 房间验证成功 ===', roomData);
+      setPickupCode(code);
+      
+      // 连接到房间
+      await connectAll(code, 'receiver');
+      
+    } catch (error: any) {
+      console.error('加入房间失败:', error);
+      showToast(error.message || '加入房间失败', "error");
+    } finally {
+      setIsValidating(false);
+    }
+  }, [connectAll, showToast]);
+
+  // 复制文本到剪贴板
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast('已复制到剪贴板', "success");
+    } catch (error) {
+      console.error('复制失败:', error);
+      showToast('复制失败', "error");
+    }
+  };
+
   // 处理初始代码连接
   useEffect(() => {
-    // initialCode isAutoConnected
     console.log(`initialCode: ${initialCode}, hasTriedAutoConnect: ${hasTriedAutoConnect.current}`);
     if (initialCode && initialCode.length === 6 && !hasTriedAutoConnect.current) {
       console.log('=== 自动连接初始代码 ===', initialCode);
@@ -201,15 +179,15 @@ export const WebRTCTextReceiver: React.FC<WebRTCTextReceiverProps> = ({
       joinRoom(initialCode);
       return;
     }
-  }, [initialCode]);
+  }, [initialCode, joinRoom]);
 
   return (
     <div className="space-y-6">
       {!hasAnyConnection ? (
         // 输入取件码界面
         <div>
-          <div className="flex items-center mb-6 sm:mb-8">
-            <div className="flex items-center space-x-3 flex-1">
+          <div className="flex items-center justify-between mb-6 sm:mb-8">
+            <div className="flex items-center space-x-3">
               <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-xl flex items-center justify-center">
                 <Download className="w-5 h-5 text-white" />
               </div>
@@ -217,6 +195,12 @@ export const WebRTCTextReceiver: React.FC<WebRTCTextReceiverProps> = ({
                 <h2 className="text-lg font-semibold text-slate-800">输入取件码</h2>
                 <p className="text-sm text-slate-600">请输入6位取件码来获取实时文字内容</p>
               </div>
+            </div>
+            
+            <div className="text-left">
+              <ConnectionStatus 
+                currentRoom={pickupCode ? { code: pickupCode, role: 'receiver' } : null}
+              />
             </div>
           </div>
 
@@ -266,94 +250,112 @@ export const WebRTCTextReceiver: React.FC<WebRTCTextReceiverProps> = ({
       ) : (
         // 已连接，显示实时文本
         <div className="space-y-6">
-          <div className="flex items-center mb-6">
-            <div className="flex items-center space-x-3 flex-1">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center space-x-3">
               <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-xl flex items-center justify-center">
                 <MessageSquare className="w-5 h-5 text-white" />
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-slate-800">实时文字内容</h3>
-                <p className="text-sm text-slate-500">
-                  <span className="text-emerald-600">✅ 已连接，正在实时接收文字</span>
-                </p>
+                <p className="text-sm text-slate-600">取件码: {pickupCode}</p>
               </div>
             </div>
-          </div>
+            
+            <div className="flex items-center space-x-4">
+              <ConnectionStatus 
 
-          {/* 连接成功状态 */}
-          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-6">
-            <h4 className="font-semibold text-emerald-800 mb-1">已连接到文字房间</h4>
-            <p className="text-emerald-700">取件码: {pickupCode}</p>
-          </div>
-
-          {/* 实时文本显示区域 */}
-          <div className="bg-white/80 backdrop-blur-sm rounded-xl p-4 border border-slate-200">
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="text-lg font-medium text-slate-800 flex items-center">
-                <MessageSquare className="w-5 h-5 mr-2" />
-                实时文字内容
-              </h4>
-              <div className="flex items-center space-x-3 text-sm">
-                <span className="text-slate-500">
-                  {receivedText.length} / 50,000 字符
-                </span>
-                {textTransfer.isConnected && (
-                  <div className="flex items-center space-x-1 bg-emerald-100 text-emerald-700 px-2 py-1 rounded-md">
-                    <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-                    <span className="font-medium">WebRTC实时同步</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="relative">
-              <textarea
-                value={receivedText}
-                readOnly
-                placeholder="等待对方发送文字内容...&#10;&#10;💡 实时同步显示，对方的编辑会立即显示在这里"
-                className="w-full h-40 px-4 py-3 border border-slate-300 rounded-lg bg-slate-50 text-slate-700 placeholder-slate-400 resize-none"
+                currentRoom={pickupCode ? { code: pickupCode, role: 'receiver' } : null}
               />
-              {!receivedText && (
-                <div className="absolute inset-0 flex items-center justify-center bg-slate-50 rounded-lg border border-slate-300">
-                  <div className="text-center">
-                    <MessageSquare className="w-12 h-12 text-slate-400 mx-auto mb-4" />
-                    <p className="text-slate-600">等待接收文字内容...</p>
-                    <p className="text-sm text-slate-500 mt-2">对方发送的文字将在这里实时显示</p>
-                  </div>
-                </div>
+              
+              <Button
+                onClick={restart}
+                variant="outline"
+                className="text-slate-600 hover:text-slate-800 border-slate-200 hover:border-slate-300"
+              >
+                重新开始
+              </Button>
+            </div>
+          </div>
+
+          {/* 文本显示区域 */}
+          <div className="bg-white/90 backdrop-blur-sm border border-slate-200 rounded-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="font-medium text-slate-800 flex items-center space-x-2">
+                <MessageSquare className="w-4 h-4" />
+                <span>接收到的文字</span>
+              </h4>
+              
+              {receivedText && (
+                <Button
+                  onClick={() => copyToClipboard(receivedText)}
+                  size="sm"
+                  variant="ghost"
+                  className="text-slate-600 hover:text-slate-800 h-8 px-3"
+                >
+                  <span>复制</span>
+                </Button>
               )}
             </div>
 
-            {/* 打字状态提示 */}
-            {isTyping && (
-              <div className="flex items-center space-x-2 mt-3 text-sm text-slate-500">
-                <div className="flex space-x-1">
-                  {[...Array(3)].map((_, i) => (
-                    <div
-                      key={i}
-                      className="w-1 h-1 bg-slate-400 rounded-full animate-bounce"
-                      style={{ animationDelay: `${i * 0.1}s` }}
-                    ></div>
-                  ))}
+            <div className="min-h-[200px] bg-slate-50/50 rounded-xl p-4 border border-slate-100">
+              {receivedText ? (
+                <div className="space-y-2">
+                  <pre className="whitespace-pre-wrap text-slate-700 text-sm leading-relaxed font-sans">
+                    {receivedText}
+                  </pre>
+                  {isTyping && (
+                    <div className="flex items-center space-x-2 text-slate-500 text-sm">
+                      <div className="flex space-x-1">
+                        <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{animationDelay: '0ms'}}></div>
+                        <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{animationDelay: '150ms'}}></div>
+                        <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{animationDelay: '300ms'}}></div>
+                      </div>
+                      <span>对方正在输入...</span>
+                    </div>
+                  )}
                 </div>
-                <span className="italic">对方正在输入...</span>
-              </div>
-            )}
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-slate-400 space-y-3">
+                  <MessageSquare className="w-12 h-12 text-slate-300" />
+                  <p className="text-center">
+                    {connection.isPeerConnected ? 
+                      '等待对方发送文字内容...' : 
+                      '等待连接建立...'}
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* 接收到的图片 */}
+          {/* 图片显示区域 */}
           {receivedImages.length > 0 && (
-            <div className="bg-white/80 backdrop-blur-sm rounded-xl p-6 border border-slate-200">
-              <h4 className="text-lg font-semibold text-slate-800 mb-4">接收的图片</h4>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="bg-white/90 backdrop-blur-sm border border-slate-200 rounded-2xl p-6 space-y-4">
+              <h4 className="font-medium text-slate-800 flex items-center space-x-2">
+                <Image className="w-4 h-4" />
+                <span>接收到的图片 ({receivedImages.length})</span>
+              </h4>
+              
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                 {receivedImages.map((image) => (
-                  <img
+                  <div 
                     key={image.id}
-                    src={image.content}
-                    alt={image.fileName}
-                    className="w-full h-32 object-cover rounded-lg border cursor-pointer hover:opacity-80 transition-opacity"
+                    className="group relative aspect-square bg-slate-50 rounded-xl overflow-hidden border border-slate-200 hover:border-slate-300 transition-all duration-200 cursor-pointer"
                     onClick={() => onPreviewImage(image.content)}
-                  />
+                  >
+                    <img
+                      src={image.content}
+                      alt={image.fileName || '接收的图片'}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                      loading="lazy"
+                    />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-200 flex items-center justify-center">
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                        <div className="bg-white/90 rounded-lg px-3 py-1">
+                          <span className="text-sm text-slate-700">点击查看</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>

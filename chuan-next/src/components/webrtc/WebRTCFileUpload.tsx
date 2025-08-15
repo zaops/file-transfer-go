@@ -2,10 +2,10 @@
 
 import React, { useState, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { useToast } from '@/components/ui/toast-simple';
 import { Upload, FileText, Image, Video, Music, Archive, X } from 'lucide-react';
-import QRCodeDisplay from '@/components/QRCodeDisplay';
 import RoomInfoDisplay from '@/components/RoomInfoDisplay';
+import { ConnectionStatus } from '@/components/ConnectionStatus';
+
 
 interface FileInfo {
   id: string;
@@ -46,8 +46,6 @@ interface WebRTCFileUploadProps {
   onClearFiles?: () => void;
   onReset?: () => void;
   disabled?: boolean;
-  isConnected?: boolean;
-  isWebSocketConnected?: boolean;
 }
 
 export function WebRTCFileUpload({
@@ -63,9 +61,7 @@ export function WebRTCFileUpload({
   onRemoveFile,
   onClearFiles,
   onReset,
-  disabled = false,
-  isConnected = false,
-  isWebSocketConnected = false
+  disabled = false
 }: WebRTCFileUploadProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -116,9 +112,9 @@ export function WebRTCFileUpload({
   if (selectedFiles.length === 0 && !pickupCode) {
     return (
       <div className="space-y-6">
-        {/* 功能标题和状态 */}
-        <div className="flex items-center">
-          <div className="flex items-center space-x-3 flex-1">
+        {/* 功能标题 */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center space-x-3">
             <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-xl flex items-center justify-center">
               <Upload className="w-5 h-5 text-white" />
             </div>
@@ -128,29 +124,9 @@ export function WebRTCFileUpload({
             </div>
           </div>
           
-          {/* 竖线分割 */}
-          <div className="w-px h-12 bg-slate-200 mx-4"></div>
-          
-          {/* 状态显示 */}
-          <div className="text-right">
-            <div className="text-sm text-slate-500 mb-1">连接状态</div>
-            <div className="flex items-center justify-end space-x-3 text-sm">
-              {/* WebSocket状态 */}
-              <div className="flex items-center space-x-1">
-                <div className="w-2 h-2 rounded-full bg-slate-400"></div>
-                <span className="text-slate-600">WS</span>
-              </div>
-              
-              {/* 分隔符 */}
-              <div className="text-slate-300">|</div>
-              
-              {/* WebRTC状态 */}
-              <div className="flex items-center space-x-1">
-                <div className="w-2 h-2 rounded-full bg-slate-400"></div>
-                <span className="text-slate-600">RTC</span>
-              </div>
-            </div>
-          </div>
+          <ConnectionStatus 
+            currentRoom={null}
+          />
         </div>
         
         <div
@@ -198,63 +174,22 @@ export function WebRTCFileUpload({
       {/* 文件列表 */}
       <div>
         {/* 功能标题和状态 */}
-        <div className="flex items-center mb-4 sm:mb-6">
-          <div className="flex items-center space-x-3 flex-1">
-            <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-xl flex items-center justify-center">
+        <div className="flex items-center justify-between mb-6">
+          {/* 标题部分 */}
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-xl flex items-center justify-center flex-shrink-0">
               <FileText className="w-5 h-5 text-white" />
             </div>
             <div>
               <h3 className="text-lg font-semibold text-slate-800">已选择文件</h3>
-              <p className="text-sm text-slate-500">{selectedFiles.length} 个文件准备传输</p>
+              <p className="text-sm text-slate-600">{selectedFiles.length} 个文件准备传输</p>
             </div>
           </div>
           
-          {/* 竖线分割 */}
-          <div className="w-px h-12 bg-slate-200 mx-4"></div>
-          
-          {/* 状态显示 */}
-          <div className="text-right">
-            <div className="text-sm text-slate-500 mb-1">连接状态</div>
-            <div className="flex items-center justify-end space-x-3 text-sm">
-              {/* WebSocket状态 */}
-              <div className="flex items-center space-x-1">
-                {isWebSocketConnected ? (
-                  <>
-                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                    <span className="text-emerald-600">WS</span>
-                  </>
-                ) : (
-                  <>
-                    <div className="w-2 h-2 rounded-full bg-slate-400"></div>
-                    <span className="text-slate-600">WS</span>
-                  </>
-                )}
-              </div>
-              
-              {/* 分隔符 */}
-              <div className="text-slate-300">|</div>
-              
-              {/* WebRTC状态 */}
-              <div className="flex items-center space-x-1">
-                {isConnected ? (
-                  <>
-                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                    <span className="text-emerald-600">RTC</span>
-                  </>
-                ) : pickupCode ? (
-                  <>
-                    <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></div>
-                    <span className="text-orange-600">RTC</span>
-                  </>
-                ) : (
-                  <>
-                    <div className="w-2 h-2 rounded-full bg-slate-400"></div>
-                    <span className="text-slate-600">RTC</span>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
+          {/* 使用 ConnectionStatus 组件 */}
+          <ConnectionStatus 
+            currentRoom={pickupCode ? { code: pickupCode, role: 'sender' } : null}
+          />
         </div>
 
         <div className="space-y-3 mb-4 sm:mb-6">

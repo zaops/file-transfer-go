@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { getWsUrl } from '@/lib/config';
+import { useWebRTCStore } from './webRTCStore';
 
 // 基础连接状态
 interface WebRTCState {
@@ -60,13 +61,8 @@ export interface WebRTCConnection {
  * 创建单一的 WebRTC 连接实例，供多个业务模块共享使用
  */
 export function useSharedWebRTCManager(): WebRTCConnection {
-  const [state, setState] = useState<WebRTCState>({
-    isConnected: false,
-    isConnecting: false,
-    isWebSocketConnected: false,
-    isPeerConnected: false,
-    error: null,
-  });
+  // 使用全局状态 store
+  const webrtcStore = useWebRTCStore();
 
   const wsRef = useRef<WebSocket | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -89,8 +85,8 @@ export function useSharedWebRTCManager(): WebRTCConnection {
   ];
 
   const updateState = useCallback((updates: Partial<WebRTCState>) => {
-    setState(prev => ({ ...prev, ...updates }));
-  }, []);
+    webrtcStore.updateState(updates);
+  }, [webrtcStore]);
 
   // 清理连接
   const cleanup = useCallback(() => {
@@ -203,7 +199,7 @@ export function useSharedWebRTCManager(): WebRTCConnection {
     console.log('[SharedWebRTC] 🚀 开始连接到房间:', roomCode, role);
 
     // 如果正在连接中，避免重复连接
-    if (state.isConnecting) {
+    if (webrtcStore.isConnecting) {
       console.warn('[SharedWebRTC] ⚠️ 正在连接中，跳过重复连接请求');
       return;
     }
@@ -211,6 +207,7 @@ export function useSharedWebRTCManager(): WebRTCConnection {
     // 清理之前的连接
     cleanup();
     currentRoom.current = { code: roomCode, role };
+    webrtcStore.setCurrentRoom({ code: roomCode, role });
     updateState({ isConnecting: true, error: null });
 
     // 注意：不在这里设置超时，因为WebSocket连接很快，
@@ -466,20 +463,14 @@ export function useSharedWebRTCManager(): WebRTCConnection {
         isConnecting: false
       });
     }
-  }, [updateState, cleanup, createOffer, handleDataChannelMessage, state.isConnecting, state.isConnected]);
+  }, [updateState, cleanup, createOffer, handleDataChannelMessage, webrtcStore.isConnecting, webrtcStore.isConnected]);
 
   // 断开连接
   const disconnect = useCallback(() => {
     console.log('[SharedWebRTC] 断开连接');
     cleanup();
-    setState({
-      isConnected: false,
-      isConnecting: false,
-      isWebSocketConnected: false,
-      isPeerConnected: false,
-      error: null,
-    });
-  }, [cleanup]);
+    webrtcStore.reset();
+  }, [cleanup, webrtcStore]);
 
   // 发送消息
   const sendMessage = useCallback((message: WebRTCMessage, channel?: string) => {
@@ -549,8 +540,8 @@ export function useSharedWebRTCManager(): WebRTCConnection {
   const isConnectedToRoom = useCallback((roomCode: string, role: 'sender' | 'receiver') => {
     return currentRoom.current?.code === roomCode &&
       currentRoom.current?.role === role &&
-      state.isConnected;
-  }, [state.isConnected]);
+      webrtcStore.isConnected;
+  }, [webrtcStore.isConnected]);
 
   // 添加媒体轨道
   const addTrack = useCallback((track: MediaStreamTrack, stream: MediaStream) => {
@@ -632,11 +623,11 @@ export function useSharedWebRTCManager(): WebRTCConnection {
 
   return {
     // 状态
-    isConnected: state.isConnected,
-    isConnecting: state.isConnecting,
-    isWebSocketConnected: state.isWebSocketConnected,
-    isPeerConnected: state.isPeerConnected,
-    error: state.error,
+    isConnected: webrtcStore.isConnected,
+    isConnecting: webrtcStore.isConnecting,
+    isWebSocketConnected: webrtcStore.isWebSocketConnected,
+    isPeerConnected: webrtcStore.isPeerConnected,
+    error: webrtcStore.error,
 
     // 操作方法
     connect,

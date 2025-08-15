@@ -332,12 +332,12 @@ export const WebRTCFileTransfer: React.FC = () => {
       }
 
       const code = data.code;
-      setPickupCode(code);
-      
       console.log('房间创建成功，取件码:', code);
       
-      // 连接WebRTC作为发送方
-      connect(code, 'sender');
+      // 先连接WebRTC作为发送方，再设置取件码
+      // 这样可以确保UI状态与连接状态同步
+      await connect(code, 'sender');
+      setPickupCode(code);
       
       showToast(`房间创建成功，取件码: ${code}`, "success");
     } catch (error) {
@@ -846,6 +846,8 @@ export const WebRTCFileTransfer: React.FC = () => {
 
       {mode === 'send' ? (
         <div className="bg-white/80 backdrop-blur-sm rounded-xl p-4 sm:p-6 shadow-lg border border-white/20 animate-fade-in-up">
+          {/* 连接状态显示 */}
+
           <WebRTCFileUpload
             selectedFiles={selectedFiles}
             fileList={fileList}
@@ -860,12 +862,12 @@ export const WebRTCFileTransfer: React.FC = () => {
             onClearFiles={clearFiles}
             onReset={resetRoom}
             disabled={!!currentTransferFile}
-            isConnected={isConnected}
-            isWebSocketConnected={isWebSocketConnected}
           />
         </div>
       ) : (
         <div className="bg-white/80 backdrop-blur-sm rounded-xl p-4 sm:p-6 shadow-lg border border-white/20 animate-fade-in-up">
+         
+          
           <WebRTCFileReceive
             onJoinRoom={joinRoom}
             files={fileList}

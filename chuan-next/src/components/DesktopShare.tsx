@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Share, Monitor } from 'lucide-react';
 import  WebRTCDesktopReceiver from '@/components/webrtc/WebRTCDesktopReceiver';
 import  WebRTCDesktopSender from '@/components/webrtc/WebRTCDesktopSender';
+import { ConnectionStatus } from '@/components/ConnectionStatus';
+import { useWebRTCStore } from '@/hooks/webrtc/webRTCStore';
 
 
 interface DesktopShareProps {
@@ -23,6 +25,9 @@ export default function DesktopShare({
   const searchParams = useSearchParams();
   const router = useRouter();
   const [mode, setMode] = useState<'share' | 'view'>('share');
+  
+  // 使用全局WebRTC状态
+  const webrtcState = useWebRTCStore();
 
   // 从URL参数中获取初始模式和房间代码
   useEffect(() => {
@@ -67,6 +72,12 @@ export default function DesktopShare({
     return '';
   }, [searchParams]);
 
+  // 连接状态变化处理 - 现在不需要了，因为使用全局状态
+  const handleConnectionChange = useCallback((connection: any) => {
+    // 这个函数现在可能不需要了，但为了兼容现有的子组件接口，保留它
+    console.log('桌面共享连接状态变化:', connection);
+  }, []);
+
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* 模式选择器 */}
@@ -92,13 +103,16 @@ export default function DesktopShare({
       </div>
 
       {/* 根据模式渲染对应的组件 */}
-      {mode === 'share' ? (
-        <WebRTCDesktopSender />
-      ) : (
-        <WebRTCDesktopReceiver 
-          initialCode={getInitialCode()}
-        />
-      )}
+      <div>
+        {mode === 'share' ? (
+          <WebRTCDesktopSender onConnectionChange={handleConnectionChange} />
+        ) : (
+          <WebRTCDesktopReceiver 
+            initialCode={getInitialCode()}
+            onConnectionChange={handleConnectionChange}
+          />
+        )}
+      </div>
     </div>
   );
 }
