@@ -29,6 +29,37 @@ export function useDesktopShareBusiness() {
     setState(prev => ({ ...prev, ...updates }));
   }, []);
 
+  // 处理远程流
+  const handleRemoteStream = useCallback((stream: MediaStream) => {
+    console.log('[DesktopShare] 收到远程流:', stream.getTracks().length, '个轨道');
+    updateState({ remoteStream: stream });
+
+    // 如果有视频元素引用，设置流
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = stream;
+    }
+  }, [updateState]);
+
+  // 设置远程轨道处理器（始终监听）
+  useEffect(() => {
+    console.log('[DesktopShare] 🎧 设置远程轨道处理器');
+    webRTC.onTrack((event: RTCTrackEvent) => {
+      console.log('[DesktopShare] 🎥 收到远程轨道:', event.track.kind, event.track.id);
+      console.log('[DesktopShare] 远程流数量:', event.streams.length);
+      
+      if (event.streams.length > 0) {
+        const remoteStream = event.streams[0];
+        console.log('[DesktopShare] 🎬 设置远程流，轨道数量:', remoteStream.getTracks().length);
+        remoteStream.getTracks().forEach(track => {
+          console.log('[DesktopShare] 远程轨道:', track.kind, track.id, track.enabled, track.readyState);
+        });
+        handleRemoteStream(remoteStream);
+      } else {
+        console.warn('[DesktopShare] ⚠️ 收到轨道但没有关联的流');
+      }
+    });
+  }, [webRTC, handleRemoteStream]);
+
   // 生成6位房间代码
   const generateRoomCode = useCallback(() => {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -140,17 +171,6 @@ export function useDesktopShareBusiness() {
       audioTrack?.removeEventListener('ended', handleStreamEnded);
     };
   }, [webRTC]);
-
-  // 处理远程流
-  const handleRemoteStream = useCallback((stream: MediaStream) => {
-    console.log('[DesktopShare] 收到远程流:', stream.getTracks().length, '个轨道');
-    updateState({ remoteStream: stream });
-
-    // 如果有视频元素引用，设置流
-    if (remoteVideoRef.current) {
-      remoteVideoRef.current.srcObject = stream;
-    }
-  }, [updateState]);
 
   // 创建房间（只建立连接，等待对方加入）
   const createRoom = useCallback(async (): Promise<string> => {
@@ -313,21 +333,6 @@ export function useDesktopShareBusiness() {
       console.log('[DesktopShare] ⏳ 等待连接稳定...');
       await new Promise(resolve => setTimeout(resolve, 1000));
 
-      // 设置远程流处理 - 在连接建立后设置
-      console.log('[DesktopShare] 📡 设置远程流处理器...');
-      webRTC.onTrack((event: RTCTrackEvent) => {
-        console.log('[DesktopShare] 🎥 收到远程轨道:', event.track.kind, event.track.id);
-        console.log('[DesktopShare] 远程流数量:', event.streams.length);
-        
-        if (event.streams.length > 0) {
-          const remoteStream = event.streams[0];
-          console.log('[DesktopShare] 🎬 设置远程流，轨道数量:', remoteStream.getTracks().length);
-          handleRemoteStream(remoteStream);
-        } else {
-          console.warn('[DesktopShare] ⚠️ 收到轨道但没有关联的流');
-        }
-      });
-
       updateState({ isViewing: true });
       console.log('[DesktopShare] 👁️ 已进入桌面共享观看模式，等待接收流...');
     } catch (error) {
@@ -336,7 +341,7 @@ export function useDesktopShareBusiness() {
       updateState({ error: errorMessage, isViewing: false });
       throw error;
     }
-  }, [webRTC, handleRemoteStream, updateState]);
+  }, [webRTC, updateState]);
 
   // 停止观看桌面共享
   const stopViewing = useCallback(async (): Promise<void> => {

@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast-simple';
 import { Upload, FileText, Image, Video, Music, Archive, X } from 'lucide-react';
 import QRCodeDisplay from '@/components/QRCodeDisplay';
+import RoomInfoDisplay from '@/components/RoomInfoDisplay';
 
 interface FileInfo {
   id: string;
@@ -397,80 +398,24 @@ export function WebRTCFileUpload({
       </div>
 
       {/* 取件码展示 */}
-      {pickupCode && (
-        <div className="border-t border-slate-200 pt-6">
-          {/* 左上角状态提示 - 类似已选择文件的风格 */}
-          <div className="flex items-center mb-6">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-xl flex items-center justify-center">
-                <FileText className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-slate-800">取件码生成成功！</h3>
-                <p className="text-sm text-slate-600">分享以下信息给接收方</p>
-              </div>
-            </div>
-          </div>
-
-          {/* 中间区域：取件码 + 分隔线 + 二维码 */}
-          <div className="flex flex-col lg:flex-row lg:items-start gap-6 lg:gap-8 mb-8">
-            {/* 左侧：取件码 */}
-            <div className="flex-1">
-              <label className="block text-sm font-medium text-slate-700 mb-3">取件码</label>
-              <div className="flex flex-col items-center rounded-xl border border-slate-200 p-6 h-40 justify-center bg-slate-50">
-                <div className="text-2xl font-bold font-mono bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent tracking-wider">
-                  {pickupCode}
-                </div>
-              </div>
-              <Button
-                onClick={onCopyCode}
-                className="w-full px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg font-medium shadow transition-all duration-200 mt-3"
-              >
-                复制取件码
-              </Button>
-            </div>
-
-            {/* 分隔线 - 大屏幕显示竖线，移动端隐藏 */}
-            <div className="hidden lg:block w-px bg-slate-200 h-64 mt-6"></div>
-
-            {/* 右侧：二维码 */}
-            {pickupLink && (
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-slate-700 mb-3">扫码传输</label>
-                <div className="flex flex-col items-center rounded-xl border border-slate-200 p-6 h-40 justify-center bg-slate-50">
-                  <QRCodeDisplay 
-                    value={pickupLink}
-                    size={120}
-                    title=""
-                    className="w-auto"
-                  />
-                </div>
-                <div className="w-full px-4 py-2.5 bg-blue-500 text-white rounded-lg font-medium shadow transition-all duration-200 mt-3 text-center">
-                  使用手机扫码快速访问
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* 底部：取件链接 */}
-          {pickupLink && (
-            <div className="space-y-3">
-              <div className="flex gap-3">
-                <div className="flex-1 code-display rounded-lg p-3 bg-slate-50 border border-slate-200">
-                  <div className="text-sm text-slate-700 break-all font-mono leading-relaxed">
-                    {pickupLink}
-                  </div>
-                </div>
-                <Button
-                  onClick={onCopyLink}
-                  className="px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium shadow transition-all duration-200 shrink-0"
-                >
-                  复制链接
-                </Button>
-              </div>
-            </div>
-          )}          
-        </div>
+      {pickupCode && pickupLink && (
+        <RoomInfoDisplay
+          code={pickupCode}
+          link={pickupLink}
+          icon={FileText}
+          iconColor="from-emerald-500 to-teal-500"
+          codeColor="from-emerald-600 to-teal-600"
+          title="取件码生成成功！"
+          subtitle="分享以下信息给接收方"
+          codeLabel="取件码"
+          qrLabel="扫码传输"
+          copyButtonText="复制取件码"
+          copyButtonColor="bg-emerald-500 hover:bg-emerald-600"
+          qrButtonText="使用手机扫码快速访问"
+          linkButtonText="复制链接"
+          onCopyCode={onCopyCode || (() => {})}
+          onCopyLink={onCopyLink || (() => {})}
+        />
       )}
     </div>
   );
