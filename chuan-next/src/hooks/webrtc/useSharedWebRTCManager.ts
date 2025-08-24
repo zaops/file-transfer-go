@@ -289,11 +289,25 @@ export function useSharedWebRTCManager(): WebRTCConnection {
 
             case 'answer':
               console.log('[SharedWebRTC] 📬 处理answer...');
-              if (pc.signalingState === 'have-local-offer') {
-                await pc.setRemoteDescription(new RTCSessionDescription(message.payload));
-                console.log('[SharedWebRTC] ✅ answer 处理完成');
-              } else {
-                console.warn('[SharedWebRTC] ⚠️ PeerConnection状态不是have-local-offer:', pc.signalingState);
+              try {
+                if (pc.signalingState === 'have-local-offer') {
+                  await pc.setRemoteDescription(new RTCSessionDescription(message.payload));
+                  console.log('[SharedWebRTC] ✅ answer 处理完成');
+                } else {
+                  console.warn('[SharedWebRTC] ⚠️ PeerConnection状态不是have-local-offer:', pc.signalingState);
+                  // 如果状态不对，尝试重新创建 offer
+                  if (pc.connectionState === 'connected' || pc.connectionState === 'connecting') {
+                    console.log('[SharedWebRTC] 🔄 连接状态正常但信令状态异常，尝试重新创建offer');
+                    // 这里不直接处理，让连接自然建立
+                  }
+                }
+              } catch (error) {
+                console.error('[SharedWebRTC] ❌ 处理answer失败:', error);
+                if (error instanceof Error && error.message.includes('Failed to set local answer sdp')) {
+                  console.warn('[SharedWebRTC] ⚠️ Answer处理失败，可能是连接状态变化导致的');
+                  // 清理连接状态，让客户端重新连接
+                  updateState({ error: 'WebRTC连接状态异常，请重新连接', isPeerConnected: false });
+                }
               }
               break;
 

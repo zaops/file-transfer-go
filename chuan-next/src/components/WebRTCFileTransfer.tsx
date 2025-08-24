@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useSharedWebRTCManager } from '@/hooks/webrtc/useSharedWebRTCManager';
 import { useFileTransferBusiness } from '@/hooks/webrtc/useFileTransferBusiness';
@@ -42,8 +42,9 @@ export const WebRTCFileTransfer: React.FC = () => {
   const urlProcessedRef = useRef(false); // 使用 ref 防止重复处理 URL
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  // 创建共享连接
+  // 创建共享连接 - 使用 useMemo 稳定引用
   const connection = useSharedWebRTCManager();
+  const stableConnection = useMemo(() => connection, [connection.isConnected, connection.isConnecting, connection.isWebSocketConnected, connection.error]);
   
   // 使用共享连接创建业务层
   const {
@@ -60,7 +61,7 @@ export const WebRTCFileTransfer: React.FC = () => {
     onFileListReceived,
     onFileRequested,
     onFileProgress
-  } = useFileTransferBusiness(connection);
+  } = useFileTransferBusiness(stableConnection);
 
   // 加入房间 (接收模式) - 提前定义以供 useEffect 使用
   const joinRoom = useCallback(async (code: string) => {

@@ -342,7 +342,7 @@ export function useFileTransferBusiness(connection: WebRTCConnection) {
     }
   }, [updateState, connection]);
 
-  // 设置处理器
+  // 设置处理器 - 使用稳定的引用避免反复注册
   useEffect(() => {
     // 使用共享连接的注册方式
     const unregisterMessage = connection.registerMessageHandler(CHANNEL_NAME, handleMessage);
@@ -352,7 +352,7 @@ export function useFileTransferBusiness(connection: WebRTCConnection) {
       unregisterMessage();
       unregisterData();
     };
-  }, [handleMessage, handleData]);
+  }, [connection]); // 只依赖 connection 对象，不依赖处理函数
 
   // 监听连接状态变化 (直接使用 connection 的状态)
   useEffect(() => {
@@ -564,22 +564,27 @@ export function useFileTransferBusiness(connection: WebRTCConnection) {
 
   // 发送文件列表
   const sendFileList = useCallback((fileList: FileInfo[]) => {
-    if (!connection.isPeerConnected) {
+    // 检查连接状态 - 优先检查数据通道状态，因为 P2P 连接可能已经建立但状态未及时更新
+    const channelState = connection.getChannelState();
+    const peerConnected = connection.isPeerConnected;
+    
+    console.log('发送文件列表检查:', {
+      channelState,
+      peerConnected,
+      fileListLength: fileList.length
+    });
+    
+    // 如果数据通道已打开或者 P2P 已连接，就可以发送文件列表
+    if (channelState === 'open' || peerConnected) {
+      console.log('发送文件列表:', fileList);
+      
+      connection.sendMessage({
+        type: 'file-list',
+        payload: fileList
+      }, CHANNEL_NAME);
+    } else {
       console.log('P2P连接未建立，等待连接后再发送文件列表');
-      return;
     }
-    
-    if (connection.getChannelState() !== 'open') {
-      console.error('数据通道未准备就绪，无法发送文件列表');
-      return;
-    }
-
-    console.log('发送文件列表:', fileList);
-    
-    connection.sendMessage({
-      type: 'file-list',
-      payload: fileList
-    }, CHANNEL_NAME);
   }, [connection]);
 
   // 请求文件
