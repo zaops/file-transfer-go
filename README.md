@@ -89,6 +89,9 @@ make dev
 # 前端
 cd chuan-next && yarn && yarn dev
 ```
+## bug/意见反馈，交流群
+![bug](./bug-repo.png)
+
 
 ## 📄 许可证
 
