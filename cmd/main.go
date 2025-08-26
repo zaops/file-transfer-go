@@ -21,7 +21,7 @@ import (
 
 func main() {
 	// 定义命令行参数
-	var port = flag.Int("port", 8080, "服务器监听端口")
+	var port = flag.Int("port", 7777, "服务器监听端口")
 	var help = flag.Bool("help", false, "显示帮助信息")
 	flag.Parse()
 
